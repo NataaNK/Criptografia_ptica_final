@@ -81,7 +81,7 @@ class App(tk.Frame):
         btn.place(relx=0.65, rely=0.5)
 
     def SEND_clicked(self):
-        # Botón de confirmación
+        # Botón de confirmación de crear usuario
         confirmation = messagebox.askquestion("Confirm", "Are you sure?")
         if confirmation == "no":
             self.sign_up_clicked()
@@ -95,9 +95,12 @@ class App(tk.Frame):
             data_list = []
 
         # No guardaremos información repetida
-        if self.username.get() not in data_list:
-            data_list.append(self.username.get())
-            data_list.append(self.password.get())
+        for i in data_list:
+            if self.username.get() in i:
+                messagebox.showerror("Sign Up Error", "User already exists")
+                self.sign_up_clicked()
+                return
+
         else:
             messagebox.showerror("Sign Up Error", "User already exists")
             self.sign_up_clicked()
@@ -115,7 +118,8 @@ class App(tk.Frame):
             data_list = []
         # Comprobamos si su información existe
         if (self.username.get() in data_list) and (self.password.get() in data_list):
-            #  Abrimos la aplicación
+            # falta comprobacion de lista en json
+            # Abrimos la aplicación
             self.open_home_window()
         else:
             #  Mensaje de error
@@ -124,7 +128,7 @@ class App(tk.Frame):
             return
 
     def open_home_window(self):
-        #  Abrimos pestaña de inicio
+        # Abrimos pestaña de inicio
         self.clear_frame()
         
    
