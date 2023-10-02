@@ -18,7 +18,10 @@ class App(tk.Frame):
 
         # Tamaño de la ventana
         self.root.geometry("600x822")
+        self.main()
 
+    def main(self):
+        self.clear_frame()
         # Título de la pestaña
         self.root.title("Tokens Market")
 
@@ -54,8 +57,10 @@ class App(tk.Frame):
         self.password = Entry(self.root, width=10)
         self.password.place(relx=0.5, rely=0.5)
         # Botón de enviar
-        btn = Button(self.root, text = "SEND", fg = "green", command=self.SEND_clicked)   
+        btn = Button(self.root, text = "CREATE ACCOUNT", fg = "green", command=self.create_account_clicked)   
         btn.place(relx=0.65, rely=0.5)
+        btn2 = Button(self.root, text = "BACK", fg = "red", command=self.main)
+        btn2.place(relx=0.1, rely=0.1)
        
     def sign_in(self):
         # Botón de sing up
@@ -79,8 +84,10 @@ class App(tk.Frame):
         # Botón de enviar
         btn = Button(self.root, text = "CONFIRM", fg = "green", command=self.CONFIRM_clicked)   
         btn.place(relx=0.65, rely=0.5)
+        btn2 = Button(self.root, text = "BACK", fg = "red", command=self.main)
+        btn2.place(relx=0.1, rely=0.1)
 
-    def SEND_clicked(self):
+    def create_account_clicked(self):
         # Botón de confirmación de crear usuario
         confirmation = messagebox.askquestion("Confirm", "Are you sure?")
         if confirmation == "no":
@@ -101,13 +108,11 @@ class App(tk.Frame):
                 self.sign_up_clicked()
                 return
 
-        else:
-            messagebox.showerror("Sign Up Error", "User already exists")
-            self.sign_up_clicked()
-            return
-
+        # Guardamos la información si no está repetida
+        data_list.append([self.username.get(), self.password.get()])
         with open(JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(data_list, file, indent=2)
+        self.sign_in_clicked()
  
     def CONFIRM_clicked(self):
         # Confirmamos que el usuario existe
@@ -117,19 +122,21 @@ class App(tk.Frame):
         except FileNotFoundError:
             data_list = []
         # Comprobamos si su información existe
-        if (self.username.get() in data_list) and (self.password.get() in data_list):
-            # falta comprobacion de lista en json
-            # Abrimos la aplicación
-            self.open_home_window()
-        else:
-            #  Mensaje de error
-            messagebox.showerror("Sign In Error", "User not found")
-            self.sign_in_clicked()
-            return
+        for i in data_list:
+            if (self.username.get() in i) and (self.password.get() in i):
+                # Abrimos la aplicación
+                self.open_home_window()
+                return
+
+        #  Mensaje de error
+        messagebox.showerror("Sign In Error", "User not found or incorrect password")
+        self.sign_in_clicked()
+        return
 
     def open_home_window(self):
         # Abrimos pestaña de inicio
         self.clear_frame()
+        self.root.title("Tokens Market - Home")
         
    
 
