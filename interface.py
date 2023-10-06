@@ -218,10 +218,11 @@ class App(tk.Frame):
         tree.place(relx=0.15, rely=0.15, width=400, height=500)
 
         # Scrollbar para la lista
-        scrollbar = ttk.Scrollbar(self.root, orient=VERTICAL, command=tree.yview)
+        scrollbar = Scrollbar(self.root, orient=VERTICAL, command=tree.yview)
         scrollbar.pack(side=RIGHT, fill=Y)
         tree.configure(yscroll=tree.yview)
         scrollbar.grid(row=0, column=1, sticky='ns')
+        scrollbar.place(relx=0.8, rely=0.15, width=20, height=500)
 
          # Botón de hacer oferta
         btn2 = Button(self.root, text = "MAKE AN OFFER", fg = "green", 
