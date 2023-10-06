@@ -10,5 +10,9 @@
   {
     "tokens_offered": 222.0,
     "price_offered": 333.0
+  },
+  {
+    "tokens_offered": 300.0,
+    "price_offered": 20.0
   }
 ]

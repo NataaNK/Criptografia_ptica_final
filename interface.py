@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import *
 from tkinter import messagebox
+from tkinter import ttk
 import json
 from pathlib import Path
 
@@ -196,7 +197,7 @@ class App(tk.Frame):
         lbl.place(relx=0.8, rely=0.05)
 
         # Listado de ofertas disponibles
- 
+        """
         # Crear una barra de deslizamiento con orientación vertical.
         scrollbar = Scrollbar(self.root, orient=VERTICAL)
         # Vincularla con la lista.
@@ -207,6 +208,20 @@ class App(tk.Frame):
         scrollbar.pack(side=RIGHT, fill=Y)
         listbox.pack()
         listbox.place(relx=0.15, rely=0.15, width=400, height=500)
+        listbox.insert(0, "TOKENS OFFERED")
+        """
+        columns = ("TOKENS OFFERED", "PRICE")
+        tree = ttk.Treeview(self.root, columns=columns, show="headings")
+        tree.heading("TOKENS OFFERED", text="TOKENS OFFERED")
+        tree.heading("PRICE", text="PRICE")
+        tree.grid(row=0, column=0, sticky='nsew')
+        tree.place(relx=0.15, rely=0.15, width=400, height=500)
+
+        # Scrollbar para la lista
+        scrollbar = ttk.Scrollbar(self.root, orient=VERTICAL, command=tree.yview)
+        scrollbar.pack(side=RIGHT, fill=Y)
+        tree.configure(yscroll=tree.yview)
+        scrollbar.grid(row=0, column=1, sticky='ns')
 
          # Botón de hacer oferta
         btn2 = Button(self.root, text = "MAKE AN OFFER", fg = "green", 
@@ -220,12 +235,11 @@ class App(tk.Frame):
                 self.offer_list = json.load(file)
         except FileNotFoundError:
             self.offer_list = []
-
+        
         for dicti in self.offer_list:
-            listbox.insert(0, "TOKENS OFFERED")
             
-            oferta = str(dicti["tokens_offered"])+ "✪       " + str(dicti["price_offered"]) + "€"
-            listbox.insert(END, oferta)
+            # oferta = str(dicti["tokens_offered"])+ "✪" + str(dicti["price_offered"]) + "€"
+            tree.insert("",END, values=(dicti["tokens_offered"], dicti["price_offered"]))
         
        
         
