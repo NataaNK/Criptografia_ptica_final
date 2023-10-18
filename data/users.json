@@ -23,5 +23,11 @@
     "user_name": "u4",
     "user_pass": "p4",
     "user_tokens": 5000
+  },
+  {
+    "user_name": "1",
+    "user_pass": "1",
+    "user_tokens": 5000,
+    "user_total_tokens_offered": 5000.0
   }
 ]

@@ -131,7 +131,8 @@ class App(tk.Frame):
         # Guardamos la información si no está repetida
         user_dict = {"user_name": self.username.get(),
                      "user_pass": self.password.get(),
-                     "user_tokens": 5000}
+                     "user_tokens": 5000,
+                     "user_total_tokens_offered": 0}
         self.data_list.append(user_dict)
         with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(self.data_list, file, indent=2)
@@ -197,19 +198,6 @@ class App(tk.Frame):
         lbl.place(relx=0.8, rely=0.05)
 
         # Listado de ofertas disponibles
-        """
-        # Crear una barra de deslizamiento con orientación vertical.
-        scrollbar = Scrollbar(self.root, orient=VERTICAL)
-        # Vincularla con la lista.
-        listbox = Listbox(self.root, yscrollcommand=scrollbar.set,
-                               font=("Arial", 20))
-        scrollbar.config(command=listbox.yview)
-        # Ubicarla a la derecha.
-        scrollbar.pack(side=RIGHT, fill=Y)
-        listbox.pack()
-        listbox.place(relx=0.15, rely=0.15, width=400, height=500)
-        listbox.insert(0, "TOKENS OFFERED")
-        """
         columns = ("TOKENS OFFERED", "PRICE")
         tree = ttk.Treeview(self.root, columns=columns, show="headings")
         tree.heading("TOKENS OFFERED", text="TOKENS OFFERED")
@@ -220,7 +208,7 @@ class App(tk.Frame):
         # Scrollbar para la lista
         scrollbar = Scrollbar(self.root, orient=VERTICAL, command=tree.yview)
         scrollbar.pack(side=RIGHT, fill=Y)
-        tree.configure(yscroll=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=0, column=1, sticky='ns')
         scrollbar.place(relx=0.8, rely=0.15, width=20, height=500)
 
@@ -291,6 +279,8 @@ class App(tk.Frame):
         # Obtenemos los valores del entry
         self.offer_tokens = float(self.entry_tokens.get())
         self.offer_price = float(self.entry_priced.get())
+        self.data_list[self.n_dict]["user_total_tokens_offered"] += self.offer_tokens
+        self.user_total_tokens_offered = self.data_list[self.n_dict]["user_total_tokens_offered"]
 
         # Comprobamos que los valores son válidos 
         if (self.user_tokens < 1) or (self.user_tokens < self.offer_tokens) or \
@@ -299,7 +289,22 @@ class App(tk.Frame):
             messagebox.showerror("Offer Error", "Incorrect values")
             self.__make_offer_clicked()
             return
+        elif (self.user_total_tokens_offered > self.user_tokens):
+            messagebox.showerror("Offer Error", "You don't have more tokens to offer")
+            self.__make_offer_clicked()
+            return
         else:
+            try:
+                with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                    data_list = json.load(file)
+            except FileNotFoundError:
+                    data_list = []
+                
+            del data_list[self.n_dict]
+            data_list.append(self.data_list[self.n_dict])
+            with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                json.dump(data_list, file, indent=2)
+
             self.__publish_offer()
 
         
