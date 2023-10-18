@@ -169,7 +169,7 @@ class App(tk.Frame):
     def __open_home_window(self):
         # GLOBAL VARIABLES
         self.user_name = str(self.data_list[self.n_dict]["user_name"])
-        self.user_tokens = self.data_list[self.n_dict]["user_tokens"]
+        self.user_tokens = str(self.data_list[self.n_dict]["user_tokens"])
 
         # Abrimos pestaña de inicio
         self.__clear_frame()
@@ -197,19 +197,6 @@ class App(tk.Frame):
         lbl.place(relx=0.8, rely=0.05)
 
         # Listado de ofertas disponibles
-        """
-        # Crear una barra de deslizamiento con orientación vertical.
-        scrollbar = Scrollbar(self.root, orient=VERTICAL)
-        # Vincularla con la lista.
-        listbox = Listbox(self.root, yscrollcommand=scrollbar.set,
-                               font=("Arial", 20))
-        scrollbar.config(command=listbox.yview)
-        # Ubicarla a la derecha.
-        scrollbar.pack(side=RIGHT, fill=Y)
-        listbox.pack()
-        listbox.place(relx=0.15, rely=0.15, width=400, height=500)
-        listbox.insert(0, "TOKENS OFFERED")
-        """
         columns = ("TOKENS OFFERED", "PRICE")
         tree = ttk.Treeview(self.root, columns=columns, show="headings")
         tree.heading("TOKENS OFFERED", text="TOKENS OFFERED")
@@ -220,7 +207,7 @@ class App(tk.Frame):
         # Scrollbar para la lista
         scrollbar = Scrollbar(self.root, orient=VERTICAL, command=tree.yview)
         scrollbar.pack(side=RIGHT, fill=Y)
-        tree.configure(yscroll=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=0, column=1, sticky='ns')
         scrollbar.place(relx=0.8, rely=0.15, width=20, height=500)
 
@@ -240,7 +227,10 @@ class App(tk.Frame):
         for dicti in self.offer_list:
             
             # oferta = str(dicti["tokens_offered"])+ "✪" + str(dicti["price_offered"]) + "€"
-            tree.insert("",END, values=(dicti["tokens_offered"], dicti["price_offered"]))
+            tree.insert("",END, values=(dicti["tokens_offered"], dicti["price_offered"]+"€"))
+
+        # Enlaza la función open_offer_details a un evento de doble clic en el Treeview
+        tree.bind("<Double-1>", lambda event: self.open_offer_details(self.offer_list[tree.index(tree.selection()[0])]))
         
        
         
@@ -320,9 +310,41 @@ class App(tk.Frame):
         
         self.__open_home_window()
 
+
+    def open_offer_details(self,offer_details):
+        # Función para abrir una nueva ventana o marco para mostrar detalles de la oferta
+        self.__clear_frame()
+        details_window = tk.Toplevel(self.root)  # Crea una nueva ventana
+        details_window.title("Detalles de la Oferta")
+        
+        # Mostrar detalles de la oferta
+        details_label = tk.Label(details_window, text=f"Detalles de la Oferta:\nTokens Ofrecidos: {offer_details['tokens_offered']}\nPrecio Ofrecido: {offer_details['price_offered']}€")
+        details_label.pack()
+
+        # Botón "Aceptar oferta"
+        accept_button = tk.Button(details_window, text="Aceptar Oferta", command=lambda: self.accept_offer(offer_details))
+        accept_button.pack()
+
+    def accept_offer(self,offer_details):
+        pass
+        # Función para aceptar la oferta (puedes agregar la lógica aquí)
+        # Por ejemplo, puedes eliminar la oferta de la lista de ofertas disponibles
+        # o llevar un registro de las ofertas aceptadas.
+
+        # Actualiza la interfaz o la lógica de tu aplicación según lo necesites.
+
+    # ...
+
+# En la parte donde agregas las ofertas disponibles a la lista:
+
+
+
+
+
+
+
+
+
+
      
         
-      
-        
-   
-
