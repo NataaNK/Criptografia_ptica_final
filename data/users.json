@@ -1,33 +1,9 @@
 [
   {
-    "user_name": "user1",
-    "user_pass": "pass1",
-    "user_tokens": 5000
-  },
-  {
-    "user_name": "u1",
-    "user_pass": "p1",
-    "user_tokens": 5000
-  },
-  {
-    "user_name": "u2",
-    "user_pass": "p2",
-    "user_tokens": 5000
-  },
-  {
-    "user_name": "u3",
-    "user_pass": "p3",
-    "user_tokens": 5000
-  },
-  {
-    "user_name": "u4",
-    "user_pass": "p4",
-    "user_tokens": 5000
-  },
-  {
     "user_name": "1",
-    "user_pass": "1",
+    "user_pass": "Zn/g+UZbQqUXDKgwkdG70r6E1shqZrrL0L1U+vd1I1Q=",
     "user_tokens": 5000,
-    "user_total_tokens_offered": 5000.0
+    "user_total_tokens_offered": 0,
+    "user_salt": "fSaIpunyLWx25n9Z6i9wHQ=="
   }
 ]

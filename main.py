@@ -1,9 +1,16 @@
 
+from criptografia import Criptografia
+from app import App
 
-from interface import App
+import re
+import os
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+import cryptography.exceptions
+import json
+from pathlib import Path
 
-myapp = App()
+cripto = Criptografia()
+myapp = App(cripto)
 
-# Si un usuario publica una oferta actualizamos sus tokens
 
 myapp.mainloop()

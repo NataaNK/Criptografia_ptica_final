@@ -4,6 +4,7 @@ from tkinter import messagebox
 from tkinter import ttk
 import json
 from pathlib import Path
+from criptografia import Criptografia
 
 
 # GLOBAL VARIABLES  
@@ -12,7 +13,10 @@ OFFERS_JSON_FILE_PATH = str(Path.cwd()) + "/data/offers.json"
 
 class App(tk.Frame):
 
-    def __init__(self):
+    def __init__(self, cripto: Criptografia):
+
+        # SISTEMA PARA CRIPTOGRAFÍA
+        self.cripto = cripto
 
         self.root = tk.Tk()
         super().__init__(self.root)
@@ -23,7 +27,120 @@ class App(tk.Frame):
         # Tamaño de la ventana
         self.root.geometry("600x822")
         self.main()
+        
 
+
+    
+    # ----------------------------- REGISTRO ----------------------------
+    
+    def __create_account_clicked(self):
+
+        # Botón de confirmación de crear usuario
+        confirmation = messagebox.askquestion("Confirm", "Are you sure?")
+        if confirmation == "no":
+            self.__sign_up_clicked()
+            return
+
+        # Comprobamos que no existe el usuario
+        if(self.cripto.KDF_verify_user_name(self.username.get())):
+            messagebox.showerror("Sign Up Error", "User already exists")
+            self.__sign_up_clicked()
+            return
+
+        # --------------------------- CONTRASEÑA ROBUSTA ------------------------------
+
+        if(not self.cripto.verify_strong_password(self.password.get())):
+            messagebox.showerror("Sign Up Error", "Password not strong enough: Must have 8 characters,\n 1 uppercase, 1 lowercase, 1 number and 1 special character ")
+            self.__sign_up_clicked()
+            return
+        
+        # ---------------- ALMACENAMIENTO DE CONTRASEÑAS CON KDC Y SALT ----------------
+
+        # Guardamos la clave derivada haciendo uso de KDF
+        self.cripto.KDF_password_storage(self.username.get(),self.password.get(), 5000, 0)
+
+        # Confirmación de registro correcto
+        messagebox.showinfo("Registration Information", "Registration Completed Successfully")
+        self.__open_home_window()
+
+
+
+        
+    # ------------------------------------- AUTENTICACIÓN -------------------------------------
+
+    def __confirm_clicked(self):
+
+        # Confirmamos que el usuario existe
+        if(not self.cripto.KDF_verify_user_name(self.username.get())):
+            messagebox.showerror("Sign In Error", "User not found")
+            self.__sign_in_clicked()
+            return
+        
+        # Comprobamos la contraseña
+        if(not self.cripto.KDF_verify_password(self.password.get())):
+            messagebox.showerror("Sign In Error", "Incorrect password")
+            self.__sign_in_clicked()
+            return
+
+        self.__open_home_window()
+
+        
+
+
+    # ---------------------- CERTIFICADO - HACER OFERTAS y GUARDARLAS ----------------------------
+
+    def __confirm_offer(self):
+        # Obtenemos los valores del entry
+        self.offer_tokens = float(self.entry_tokens.get())
+        self.offer_price = float(self.entry_priced.get())
+        self.data_list[self.cripto.n_dict]["user_total_tokens_offered"] += self.offer_tokens
+        self.user_total_tokens_offered = self.data_list[self.cripto.n_dict]["user_total_tokens_offered"]
+
+        # Comprobamos que los valores son válidos 
+        if (self.user_tokens < 1) or (self.user_tokens < self.offer_tokens) or \
+           (self.offer_price > 100000) or (self.offer_price < 1):
+            
+            messagebox.showerror("Offer Error", "Incorrect values")
+            self.__make_offer_clicked()
+            return
+        elif (self.user_total_tokens_offered > self.user_tokens):
+            messagebox.showerror("Offer Error", "You don't have more tokens to offer")
+            self.__make_offer_clicked()
+            return
+        else:
+            try:
+                with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                    data_list = json.load(file)
+            except FileNotFoundError:
+                    data_list = []
+                
+            del data_list[self.cripto.n_dict]
+            data_list.append(self.data_list[self.cripto.n_dict])
+            with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                json.dump(data_list, file, indent=2)
+
+            self.__publish_offer()
+
+
+    def __publish_offer(self):
+
+       # Guardamos la oferta en el json
+        try:
+            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                self.offer_list = json.load(file)
+        except FileNotFoundError:
+            self.offer_list = []
+
+        offer_dict = {"tokens_offered": self.offer_tokens,
+                      "price_offered": self.offer_price}
+        self.offer_list.append(offer_dict)
+        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(self.offer_list, file, indent=2)
+        
+        self.__open_home_window()
+
+        
+    # ------------------------- INTERFAZ --------------------------------------------
 
     def main(self):
 
@@ -103,74 +220,10 @@ class App(tk.Frame):
         btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
         btn2.place(relx=0.1, rely=0.1)
 
-
-    def __create_account_clicked(self):
-
-        # Botón de confirmación de crear usuario
-        confirmation = messagebox.askquestion("Confirm", "Are you sure?")
-        if confirmation == "no":
-            self.__sign_up_clicked()
-            return
-
-        # Guardamos la información en un json
-        try:
-            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                self.data_list = json.load(file)
-        except FileNotFoundError:
-            self.data_list = []
-
-        # No guardaremos información repetida
-        self.n_dict = 0
-        for dicti in self.data_list:
-            if self.username.get() == dicti["user_name"]:
-                messagebox.showerror("Sign Up Error", "User already exists")
-                self.__sign_up_clicked()
-                return
-            self.n_dict += 1
-
-        # Guardamos la información si no está repetida
-        user_dict = {"user_name": self.username.get(),
-                     "user_pass": self.password.get(),
-                     "user_tokens": 5000,
-                     "user_total_tokens_offered": 0}
-        self.data_list.append(user_dict)
-        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(self.data_list, file, indent=2)
-
-        # Confirmación de registro correcto
-        messagebox.showinfo("Registration Information", "Registration Completed Successfully")
-        self.__open_home_window()
- 
-
-    def __confirm_clicked(self):
-
-        # Confirmamos que el usuario existe
-        try:
-            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                self.data_list = json.load(file)
-        except FileNotFoundError:
-            self.data_list = []
-            
-        # Comprobamos si su información existe
-        self.n_dict = 0
-        for dicti in self.data_list:
-            if (self.username.get() == dicti["user_name"]) \
-                and (self.password.get() == dicti["user_pass"]):
-                # Abrimos la aplicación
-                self.__open_home_window()
-                return
-            self.n_dict += 1
-
-        #  Mensaje de error
-        messagebox.showerror("Sign In Error", "User not found or incorrect password")
-        self.__sign_in_clicked()
-        return
-
-
     def __open_home_window(self):
         # GLOBAL VARIABLES
-        self.user_name = str(self.data_list[self.n_dict]["user_name"])
-        self.user_tokens = self.data_list[self.n_dict]["user_tokens"]
+        self.user_name = self.cripto.user_data_list[self.cripto.n_dict]["user_name"]
+        self.user_tokens = self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]
 
         # Abrimos pestaña de inicio
         self.__clear_frame()
@@ -273,61 +326,5 @@ class App(tk.Frame):
         # Botón de confirmar
         btn = Button(self.root, text = "CONFIRM", fg = "green", command=self.__confirm_offer)   
         btn.place(relx=0.75, rely=0.5)
-        
-        
-    def __confirm_offer(self):
-        # Obtenemos los valores del entry
-        self.offer_tokens = float(self.entry_tokens.get())
-        self.offer_price = float(self.entry_priced.get())
-        self.data_list[self.n_dict]["user_total_tokens_offered"] += self.offer_tokens
-        self.user_total_tokens_offered = self.data_list[self.n_dict]["user_total_tokens_offered"]
 
-        # Comprobamos que los valores son válidos 
-        if (self.user_tokens < 1) or (self.user_tokens < self.offer_tokens) or \
-           (self.offer_price > 100000) or (self.offer_price < 1):
-            
-            messagebox.showerror("Offer Error", "Incorrect values")
-            self.__make_offer_clicked()
-            return
-        elif (self.user_total_tokens_offered > self.user_tokens):
-            messagebox.showerror("Offer Error", "You don't have more tokens to offer")
-            self.__make_offer_clicked()
-            return
-        else:
-            try:
-                with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                    data_list = json.load(file)
-            except FileNotFoundError:
-                    data_list = []
-                
-            del data_list[self.n_dict]
-            data_list.append(self.data_list[self.n_dict])
-            with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-                json.dump(data_list, file, indent=2)
-
-            self.__publish_offer()
-
-        
-    def __publish_offer(self):
-
-       # Guardamos la oferta en el json
-        try:
-            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                self.offer_list = json.load(file)
-        except FileNotFoundError:
-            self.offer_list = []
-
-        offer_dict = {"tokens_offered": self.offer_tokens,
-                      "price_offered": self.offer_price}
-        self.offer_list.append(offer_dict)
-        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(self.offer_list, file, indent=2)
-        
-        self.__open_home_window()
-
-     
-        
-      
-        
-   
 
