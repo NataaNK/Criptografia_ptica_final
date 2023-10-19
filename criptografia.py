@@ -1,4 +1,4 @@
-
+import Fingerprint
 import re
 import os
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
@@ -84,4 +84,7 @@ class Criptografia:
             return False
         return True
     
+
+    def TOKEN_verify_finger_print(self):
+        pass
    
