@@ -5,11 +5,15 @@ from tkinter import ttk
 import json
 from pathlib import Path
 from criptografia import Criptografia
+import os
+import time
 
 
 # GLOBAL VARIABLES  
 USERS_JSON_FILE_PATH =  str(Path.cwd()) + "/data/users.json"
 OFFERS_JSON_FILE_PATH = str(Path.cwd()) + "/data/offers.json"
+BLOCKED_USERS_JSON_FILE_PATH = str(Path.cwd()) + "/data/blocked_users.json"
+BLOCKED_TIME = 5*60 # 5 minutos
 
 class App(tk.Frame):
 
@@ -25,7 +29,7 @@ class App(tk.Frame):
         self.root.configure(bg="#424a57")
 
         # Tamaño de la ventana
-        self.root.geometry("600x822")
+        self.root.geometry("600x760")
         self.main()
         
 
@@ -55,38 +59,112 @@ class App(tk.Frame):
             return
         
         # ---------------- ALMACENAMIENTO DE CONTRASEÑAS CON KDC Y SALT ----------------
-
+        
         # Guardamos la clave derivada haciendo uso de KDF
         self.cripto.KDF_password_storage(self.username.get(),self.password.get(), 5000, 0)
+        self.__clear_frame()
+        
+        # ------- AUTENTICACIÓN EN DOS PASOS - QR PARA OBTENER CLAVES TEMPORALES ---------
 
-        # Confirmación de registro correcto
-        messagebox.showinfo("Registration Information", "Registration Completed Successfully")
-        self.__open_home_window()
+        # Mostramos el QR
+        qr_path = str(Path.cwd()) + "/assets/images/qr_temp.png"
+        qr = PhotoImage(file = qr_path)
+        qr = qr.subsample(1, 1)
+        qr_lbl = Label(self.root, image=qr, bg="#fff")
+        qr_lbl.image = qr 
+        qr_lbl.place(relx=0.1, rely=0.1)
 
-
+        # Al darle a siguiente borramos el qr de la base de datos antes de ir a 
+        # home window
+        btn = Button(self.root, text = "Siguiente", fg = "green", command=self.__register_success)   
+        btn.place(relx=0.8, rely=0.8)
 
         
     # ------------------------------------- AUTENTICACIÓN -------------------------------------
 
-    def __confirm_clicked(self):
+    def __sign_in_authentication_1(self):
 
         # Confirmamos que el usuario existe
         if(not self.cripto.KDF_verify_user_name(self.username.get())):
             messagebox.showerror("Sign In Error", "User not found")
+            self.counter_pass += 1
             self.__sign_in_clicked()
             return
+        
+        # Comprobamos si el usuario está bloqueado o lo bloqueamos
+        # si supera los 6 intentos permitidos
+        self.counter_pass = self.maximum_attempts(self.counter_pass)
+        self.counter_code = self.maximum_attempts(self.counter_code)
         
         # Comprobamos la contraseña
         if(not self.cripto.KDF_verify_password(self.password.get())):
             messagebox.showerror("Sign In Error", "Incorrect password")
+            self.counter_pass += 1
             self.__sign_in_clicked()
+            return
+        
+        self.__sign_in_input_authen_2()
+
+    def __sign_in_authentication_2(self):
+
+        # Comprobamos si el usuario está bloqueado o lo bloqueamos
+        # si supera los 6 intentos permitidos
+        self.counter_code = self.maximum_attempts(self.counter_code)
+
+        if(not self.cripto.TOKEN_verify_code(self.code.get())):
+            self.counter_code += 1
+            messagebox.showerror("Sign In Error", "Incorrect code")
+            self.__sign_in_input_authen_2()
             return
 
         self.__open_home_window()
 
+    def maximum_attempts(self, counter: int):
+        # Comprobamos si el usuario está bloquedo
+        try:
+            with open(BLOCKED_USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_blocked_list = json.load(file)
+        except FileNotFoundError:
+            user_blocked_list = []
+
+        n_block_dict = 0
+        for dicti in user_blocked_list:
+            if dicti["user_name"] == self.cripto.user_data_list[self.cripto.n_dict]["user_name"]:
+                counter = 0
+                if (time.time()-float(dicti["blocked_time"]) > BLOCKED_TIME): 
+                    del user_blocked_list[n_block_dict]
+                    with open(BLOCKED_USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                        json.dump(user_blocked_list, file, indent=2)
+                    return counter
+                else:
+                    messagebox.showerror("Sign In Error", "Too many attempts, try again later")
+                    time.sleep(1)
+                    self.main()
+                    return counter
+            n_block_dict += 1
+
+        # Tras 6 intentos bloqueamos la cuenta para evitar un posible ataque por fuerza bruta
+        if counter == 6:
+            try:
+                with open(BLOCKED_USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                    user_blocked_list = json.load(file)
+            except FileNotFoundError:
+                user_blocked_list = []
+            user_blocked_dict = {
+                                "user_name": self.cripto.user_data_list[self.cripto.n_dict]["user_name"],
+                                "blocked_time": time.time()
+                                }
+            user_blocked_list.append(user_blocked_dict)
+            with open(BLOCKED_USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                     json.dump(user_blocked_list, file, indent=2)
+
+            messagebox.showerror("Sign In Error", "Too many attempts, try again later")
+            time.sleep(1)
+            self.main()
+            return counter
         
 
-
+    
     # ---------------------- CERTIFICADO - HACER OFERTAS y GUARDARLAS ----------------------------
 
     def __confirm_offer(self):
@@ -190,7 +268,13 @@ class App(tk.Frame):
         btn1.place(relx=0.65, rely=0.5)
         btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
         btn2.place(relx=0.1, rely=0.1)
-       
+    
+    def __register_success(self):
+
+        os.remove(str(Path.cwd()) + "/assets/images/qr_temp.png")
+        # Confirmación de registro correcto
+        messagebox.showinfo("Registration Information", "Register Completed Successfully")
+        self.__open_home_window()
 
     def __sign_in(self):
 
@@ -215,10 +299,23 @@ class App(tk.Frame):
         self.password = Entry(self.root, width=10)
         self.password.place(relx=0.5, rely=0.5)
         # Botón de enviar
-        btn1 = Button(self.root, text = "CONFIRM", fg = "green", command=self.__confirm_clicked)   
+        btn1 = Button(self.root, text = "CONFIRM", fg = "green", command=self.__sign_in_authentication_1)   
         btn1.place(relx=0.65, rely=0.5)
         btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
         btn2.place(relx=0.1, rely=0.1)
+
+    def __sign_in_input_authen_2(self):
+        
+        self.__clear_frame()
+        self.root.title("Tokens Market - Two-factor authentication")
+        # Clave temporal
+        lbl = Label(self.root, text = "Code")
+        lbl.place(relx=0.35, rely=0.4)
+        self.code = Entry(self.root, width=10)
+        self.code.place(relx=0.5, rely=0.4)
+        # Botón de enviar
+        btn = Button(self.root, text = "CONFIRM", fg = "green", command=self.__sign_in_authentication_2)   
+        btn.place(relx=0.65, rely=0.5)
 
     def __open_home_window(self):
         # GLOBAL VARIABLES
