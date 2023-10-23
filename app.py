@@ -4,9 +4,10 @@ from tkinter import messagebox
 from tkinter import ttk
 import json
 from pathlib import Path
-from criptografia import Criptografia
 import os
 import time
+from criptografia import Criptografia
+from RSA import RSA
 
 
 # GLOBAL VARIABLES  
@@ -17,10 +18,11 @@ BLOCKED_TIME = 5*60 # 5 minutos
 
 class App(tk.Frame):
 
-    def __init__(self, cripto: Criptografia):
+    def __init__(self, cripto: Criptografia, criptosistema: RSA):
 
         # SISTEMA PARA CRIPTOGRAFÍA
         self.cripto = cripto
+        self.rsa = criptosistema
 
         self.root = tk.Tk()
         super().__init__(self.root)
@@ -54,14 +56,21 @@ class App(tk.Frame):
         # --------------------------- CONTRASEÑA ROBUSTA ------------------------------
 
         if(not self.cripto.verify_strong_password(self.password.get())):
-            messagebox.showerror("Sign Up Error", "Password not strong enough: Must have 8 characters,\n 1 uppercase, 1 lowercase, 1 number and 1 special character ")
+            messagebox.showerror("Sign Up Error", "Password not strong enough: Must have 8 characters,\n 1 \
+                                 uppercase, 1 lowercase, 1 number and 1 special character ")
             self.__sign_up_clicked()
             return
         
         # ---------------- ALMACENAMIENTO DE CONTRASEÑAS CON KDC Y SALT ----------------
         
         # Guardamos la clave derivada haciendo uso de KDF
-        self.cripto.KDF_password_storage(self.username.get(),self.password.get(), 5000, 0)
+        self.cripto.KDF_password_storage(
+                            self.rsa.encrypt_with_public_key(self.username.get()),
+                            self.rsa.encrypt_with_public_key(self.password.get()),
+                            self.rsa.encrypt_with_public_key("5000"),
+                            self.rsa.encrypt_with_public_key("0"),
+                            self.rsa.public_key
+                            )
         self.__clear_frame()
         
         # ------- AUTENTICACIÓN EN DOS PASOS - QR PARA OBTENER CLAVES TEMPORALES ---------
@@ -69,7 +78,7 @@ class App(tk.Frame):
         # Mostramos el QR
         qr_path = str(Path.cwd()) + "/assets/images/qr_temp.png"
         qr = PhotoImage(file = qr_path)
-        qr = qr.subsample(1, 1)
+        qr = qr.subsample(100, 100)
         qr_lbl = Label(self.root, image=qr, bg="#fff")
         qr_lbl.image = qr 
         qr_lbl.place(relx=0.1, rely=0.1)
@@ -87,39 +96,54 @@ class App(tk.Frame):
         # Confirmamos que el usuario existe
         if(not self.cripto.KDF_verify_user_name(self.username.get())):
             messagebox.showerror("Sign In Error", "User not found")
-            self.counter_pass += 1
+            self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] += 1
             self.__sign_in_clicked()
             return
-        
+        self.counter_pass_expiration = self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][1]
+
+        if ((time.time()-self.counter_pass_expiration) > 1800): #30 minutos
+            self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] = 0
+            self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][1] = time.time()
+
+        self.counter_pass = self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0]
+
         # Comprobamos si el usuario está bloqueado o lo bloqueamos
         # si supera los 6 intentos permitidos
-        self.counter_pass = self.maximum_attempts(self.counter_pass)
-        self.counter_code = self.maximum_attempts(self.counter_code)
+        self.maximum_attempts(self.counter_pass, "pass")
+        
         
         # Comprobamos la contraseña
-        if(not self.cripto.KDF_verify_password(self.password.get())):
+        if(not self.cripto.KDF_verify_password(self.rsa.encrypt_with_public_key(self.password.get()))):
             messagebox.showerror("Sign In Error", "Incorrect password")
-            self.counter_pass += 1
+            self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] += 1
             self.__sign_in_clicked()
             return
         
         self.__sign_in_input_authen_2()
 
+
     def __sign_in_authentication_2(self):
 
+        self.counter_code_expiration = self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][1]
+        if ((time.time()-self.counter_code_expiration) > 1800): #30 minutos
+            self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][0] = 0
+            self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][1] = time.time()
+        self.counter_code = self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][0]
         # Comprobamos si el usuario está bloqueado o lo bloqueamos
         # si supera los 6 intentos permitidos
-        self.counter_code = self.maximum_attempts(self.counter_code)
+        self.maximum_attempts(self.counter_code, "code")
 
         if(not self.cripto.TOKEN_verify_code(self.code.get())):
-            self.counter_code += 1
+            self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][0] += 1
             messagebox.showerror("Sign In Error", "Incorrect code")
             self.__sign_in_input_authen_2()
             return
 
         self.__open_home_window()
 
-    def maximum_attempts(self, counter: int):
+
+
+    def maximum_attempts(self, counter: int, type: str):
         # Comprobamos si el usuario está bloquedo
         try:
             with open(BLOCKED_USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
@@ -130,17 +154,13 @@ class App(tk.Frame):
         n_block_dict = 0
         for dicti in user_blocked_list:
             if dicti["user_name"] == self.cripto.user_data_list[self.cripto.n_dict]["user_name"]:
-                counter = 0
                 if (time.time()-float(dicti["blocked_time"]) > BLOCKED_TIME): 
                     del user_blocked_list[n_block_dict]
                     with open(BLOCKED_USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                         json.dump(user_blocked_list, file, indent=2)
-                    return counter
                 else:
                     messagebox.showerror("Sign In Error", "Too many attempts, try again later")
-                    time.sleep(1)
                     self.main()
-                    return counter
             n_block_dict += 1
 
         # Tras 6 intentos bloqueamos la cuenta para evitar un posible ataque por fuerza bruta
@@ -158,10 +178,26 @@ class App(tk.Frame):
             with open(BLOCKED_USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                      json.dump(user_blocked_list, file, indent=2)
 
+            if (type == "pass"): 
+                self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] = 0
+            else:
+                self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][0] = 0
+
             messagebox.showerror("Sign In Error", "Too many attempts, try again later")
-            time.sleep(1)
             self.main()
-            return counter
+        
+        # Actualizamos los atributos attempts
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
+
         
 
     
@@ -171,29 +207,34 @@ class App(tk.Frame):
         # Obtenemos los valores del entry
         self.offer_tokens = float(self.entry_tokens.get())
         self.offer_price = float(self.entry_priced.get())
-        self.data_list[self.cripto.n_dict]["user_total_tokens_offered"] += self.offer_tokens
-        self.user_total_tokens_offered = self.data_list[self.cripto.n_dict]["user_total_tokens_offered"]
+        user_tokens = self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"])
+        user_total_tokens_offered = self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"])
+        user_total_tokens_offered += self.offer_tokens
+        
 
         # Comprobamos que los valores son válidos 
-        if (self.user_tokens < 1) or (self.user_tokens < self.offer_tokens) or \
+        if (user_tokens < 1) or (user_tokens < self.offer_tokens) or \
            (self.offer_price > 100000) or (self.offer_price < 1):
             
             messagebox.showerror("Offer Error", "Incorrect values")
             self.__make_offer_clicked()
             return
-        elif (self.user_total_tokens_offered > self.user_tokens):
+        elif (user_total_tokens_offered > user_tokens):
             messagebox.showerror("Offer Error", "You don't have more tokens to offer")
             self.__make_offer_clicked()
             return
         else:
+
+            self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"] = self.rsa.encrypt_with_public_key(user_total_tokens_offered)
+
             try:
                 with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
                     data_list = json.load(file)
             except FileNotFoundError:
                     data_list = []
-                
+
             del data_list[self.cripto.n_dict]
-            data_list.append(self.data_list[self.cripto.n_dict])
+            data_list.append(self.cripto.user_data_list[self.cripto.n_dict])
             with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                 json.dump(data_list, file, indent=2)
 
@@ -209,7 +250,8 @@ class App(tk.Frame):
         except FileNotFoundError:
             self.offer_list = []
 
-        offer_dict = {"tokens_offered": self.offer_tokens,
+        offer_dict = {"user_seller": self.cripto.user_data_list[self.cripto.n_dict]["user_name"],
+                      "tokens_offered": self.offer_tokens,
                       "price_offered": self.offer_price}
         self.offer_list.append(offer_dict)
         with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
@@ -318,9 +360,6 @@ class App(tk.Frame):
         btn.place(relx=0.65, rely=0.5)
 
     def __open_home_window(self):
-        # GLOBAL VARIABLES
-        self.user_name = self.cripto.user_data_list[self.cripto.n_dict]["user_name"]
-        self.user_tokens = self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]
 
         # Abrimos pestaña de inicio
         self.__clear_frame()
@@ -332,7 +371,7 @@ class App(tk.Frame):
         btn1.place(relx=0.05, rely=0.06)
 
         # Nombre del usuario
-        lbl = Label(self.root, text = self.user_name, 
+        lbl = Label(self.root, text = self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]), 
                     bg="#424a57", fg="white", font=("Arial", 30))
         lbl.place(relx=0.6, rely=0.05)
         # Indicador de tokens
@@ -343,7 +382,7 @@ class App(tk.Frame):
         coin_lbl.image = coin 
         coin_lbl.place(relx=0.75, rely=0.06)
 
-        lbl = Label(self.root, text = str(self.user_tokens), 
+        lbl = Label(self.root, text = self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]), 
                     bg="#424a57", fg="white", font=("Arial", 30))
         lbl.place(relx=0.8, rely=0.05)
 
@@ -366,7 +405,7 @@ class App(tk.Frame):
         btn2 = Button(self.root, text = "MAKE AN OFFER", fg = "green", 
                       command=self.__make_offer_clicked, font=("Arial", 20), 
                       bg = "#a89732")
-        btn2.place(relx=0.5, rely=0.8)
+        btn2.place(relx=0.5, rely=0.86)
 
         # Insertamos las ofertas disponibles ne la lista
         try:
@@ -376,7 +415,6 @@ class App(tk.Frame):
             self.offer_list = []
         
         for dicti in self.offer_list:
-            
             # oferta = str(dicti["tokens_offered"])+ "✪" + str(dicti["price_offered"]) + "€"
             tree.insert("",END, values=(dicti["tokens_offered"], dicti["price_offered"]))
         
@@ -402,12 +440,12 @@ class App(tk.Frame):
         self.entry_tokens = Entry(self.root, textvariable=Var_text_tokens, 
                        width=20, fg="grey")
         self.entry_tokens.place(relx=0.5, rely=0.4)
-        self.entry_tokens.insert(0, "1 - " + str(self.user_tokens))
+        self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]))
         
         # El texto escrito deberia ser negro pero es gris como lo q se superpone
         self.entry_tokens.bind("<FocusIn>", lambda event: self.entry_tokens.delete(0,"end")
-                    if Var_text_tokens.get() == "1 - " + str(self.user_tokens) else None)
-        self.entry_tokens.bind("<FocusOut>", lambda event: self.entry_tokens.insert(0, "1 - " + str(self.user_tokens)) 
+                    if Var_text_tokens.get() == "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]) else None)
+        self.entry_tokens.bind("<FocusOut>", lambda event: self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"])) 
                     if Var_text_tokens.get() == "" else None)
         
         self.entry_priced = Entry(self.root, textvariable=Var_text_price,width=20,fg="grey")
