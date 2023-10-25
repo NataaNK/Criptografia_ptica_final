@@ -3,6 +3,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 from pathlib import Path
+import base64
 # GLOBAL VARIABLES
 KEY_PEM_PATH = str(Path.cwd()) + "/data/key.pem"
 
@@ -48,8 +49,9 @@ class RSA:
             key_file.write(private_pem)
 
     def encrypt_with_public_key(self, message: str):
+
         ciphertext = self.public_key.encrypt(
-            message.encode('ascii'),
+            bytes(message, 'ascii'),
             padding.OAEP(
                         mgf=padding.MGF1(algorithm=hashes.SHA256()),
                         algorithm=hashes.SHA256(),
@@ -57,6 +59,6 @@ class RSA:
                         )
             )    
 
-        return ciphertext        
+        return base64.b64encode(ciphertext)       
 
     

@@ -66,7 +66,7 @@ class App(tk.Frame):
         # Guardamos la clave derivada haciendo uso de KDF
         self.cripto.KDF_password_storage(
                             self.rsa.encrypt_with_public_key(self.username.get()),
-                            self.rsa.encrypt_with_public_key(self.password.get()),
+                            self.password.get(),
                             self.rsa.encrypt_with_public_key("5000"),
                             self.rsa.encrypt_with_public_key("0"),
                             self.rsa.public_key
@@ -78,7 +78,7 @@ class App(tk.Frame):
         # Mostramos el QR
         qr_path = str(Path.cwd()) + "/assets/images/qr_temp.png"
         qr = PhotoImage(file = qr_path)
-        qr = qr.subsample(100, 100)
+        qr = qr.subsample(1, 1)
         qr_lbl = Label(self.root, image=qr, bg="#fff")
         qr_lbl.image = qr 
         qr_lbl.place(relx=0.1, rely=0.1)
@@ -113,7 +113,7 @@ class App(tk.Frame):
         
         
         # Comprobamos la contraseña
-        if(not self.cripto.KDF_verify_password(self.rsa.encrypt_with_public_key(self.password.get()))):
+        if(not self.cripto.KDF_verify_password(self.password.get())):
             messagebox.showerror("Sign In Error", "Incorrect password")
             self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] += 1
             self.__sign_in_clicked()
