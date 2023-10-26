@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 import time
 from criptografia import Criptografia
-from RSA import RSA
+from rsa import RSA
 
 
 # GLOBAL VARIABLES  
@@ -206,18 +206,17 @@ class App(tk.Frame):
 
     def __confirm_offer(self):
         # Obtenemos los valores del entry
-        self.offer_tokens = float(self.entry_tokens.get())
-        self.offer_price = float(self.entry_priced.get())
-        user_tokens = float(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))
-        user_total_tokens_offered = float(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"]).decode('ascii'))
+        self.offer_tokens = int(self.entry_tokens.get())
+        self.offer_price = int(self.entry_priced.get())
+        user_tokens = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))
+        user_total_tokens_offered = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"]).decode('ascii'))
         user_total_tokens_offered += self.offer_tokens
         
 
         # Comprobamos que los valores son válidos 
         if (user_tokens < 1) or (user_tokens < self.offer_tokens) or \
            (self.offer_price > 100000) or (self.offer_price < 1):
-            
-            messagebox.showerror("Offer Error", "Incorrect values")
+            messagebox.showerror("Offer Error", "Incorrect values, must be an integer belonging to the indicated range")
             self.__make_offer_clicked()
             return
         elif (user_total_tokens_offered > user_tokens):
@@ -251,9 +250,10 @@ class App(tk.Frame):
         except FileNotFoundError:
             self.offer_list = []
 
-        offer_dict = {"user_seller": self.rsa.encrypt_with_public_key(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii')).decode('ascii'),
+        offer_dict = {"user_seller": self.cripto.user_data_list[self.cripto.n_dict]["user_name"], # Ya está encriptado
                       "tokens_offered": self.offer_tokens,
-                      "price_offered": self.offer_price}
+                      "price_offered": self.offer_price, 
+                       "accepted_offer": False}
         self.offer_list.append(offer_dict)
         with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(self.offer_list, file, indent=2)
@@ -264,7 +264,63 @@ class App(tk.Frame):
 
     # ------------------ COMPRAR Y VENDER TOKENS OFERTADOS -------------------
 
+    # Define la función que se llamará cuando se haga clic en una oferta
+    def accept_offer(self, index: int, tokens_offered, price_offered):
+        # Le sumamos los tokens al comprador
+        messagebox.showinfo("Purchase Information", "Purchase Completed Successfully")
+        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
+        self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))+\
+                                         int(tokens_offered))).decode('ascii')
 
+        # Mediante index, podemos obtener el diccionario de la oferta
+        # y marcarla como aceptada
+        self.offer_list[index]["accepted_offer"] = "Your offer of " + tokens_offered + "✪ for the price of " + price_offered + \
+                                                    "€ has been accepted" 
+        # Lo actualizamos en la base de datos
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+ 
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
+
+        try:
+            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                offers_list = json.load(file)
+        except FileNotFoundError:
+            offers_list = []
+
+        del offers_list[index]
+        offers_list.insert(index, self.offer_list[index])
+        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(offers_list, file, indent=2)
+
+        self.__open_home_window()   
+
+    # Se llama cuando una de tus ofertas a sido aceptada
+    def sell_offer(self, tokens_offered):
+        # Restamos los tokens vendidos
+        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
+        self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))-\
+                                         int(tokens_offered))).decode('ascii')
+        
+        # Lo actualizamos en la base de datos
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
+
+        self.__open_home_window()  
 
         
     # ------------------------- INTERFAZ --------------------------------------------
@@ -421,9 +477,65 @@ class App(tk.Frame):
         except FileNotFoundError:
             self.offer_list = []
         
+        d = 0
         for dicti in self.offer_list:
-            # oferta = str(dicti["tokens_offered"])+ "✪" + str(dicti["price_offered"]) + "€"
-            tree.insert("",END, values=(dicti["tokens_offered"], dicti["price_offered"]))
+            if (dicti["accepted_offer"]) and \
+            (self.cripto.decrypt_with_private_key(dicti["user_seller"]).decode('ascii') == \
+             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii')):
+                # Mostramos mensaje de oferta aceptada
+                messagebox.showinfo("Sale Information", dicti["accepted_offer"])
+                # Eliminamos la oferta de la base de dato
+                del self.offer_list[d]
+                with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                    json.dump(self.offer_list, file, indent=2)
+                # Avisamos al vendedor de que ha sido aceptada su oferta y realizamos la transacción
+                self.sell_offer(dicti["tokens_offered"])
+                return
+            elif (not dicti["accepted_offer"]) and ((self.cripto.decrypt_with_private_key(dicti["user_seller"]).decode('ascii') == \
+             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii'))):
+                # Si la ofereta está disponible y es, la muestro indicando que es mía
+                tree.insert("",END, values=("¡MINE! "+ str(dicti["tokens_offered"]), dicti["price_offered"]))
+            elif (not dicti["accepted_offer"]):
+                # Si la ofereta está disponible y no es mía, la muestro
+                tree.insert("",END, values=(dicti["tokens_offered"], dicti["price_offered"]))
+            d+=1
+
+        # Define la función offer_clicked dentro de la clase
+        def offer_clicked(event):  
+            selected_item = tree.selection()
+            if not selected_item:
+                self.__open_home_window()
+                return  # No se ha seleccionado ningún elemento
+            
+            # Obtén la columna donde se hizo clic
+            column = tree.identify_column(event.x)
+            
+            # Si la columna es una columna de encabezado, no realices ninguna acción
+            if column and "heading" in column:
+                self.__open_home_window()
+                return
+            
+            # Si la oferta es tuya no peudes aceptarla
+            if tree.item(selected_item, "values")[0][0] == "¡":
+                messagebox.showerror("Purchase Offer", "You can't accept your own offers")
+                self.__open_home_window()
+                return
+            
+            # Botón de confirmación de compra
+            confirmation = messagebox.askquestion("Confirm Purchase", "Are you sure you want to buy these tokens?")
+            if confirmation == "no":
+                self.__open_home_window()
+                return
+            
+            if selected_item:
+                index = int(tree.index(selected_item))
+                tokens_offered = tree.item(selected_item, "values")[0]
+                price_offered = tree.item(selected_item, "values")[1]
+                self.accept_offer(index, tokens_offered, price_offered)
+                return
+
+        # Asocia la función offer_clicked al evento de clic en el Treeview
+        tree.bind("<ButtonRelease-1>", offer_clicked)
         
        
         

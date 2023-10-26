@@ -52,10 +52,10 @@ class Criptografia:
                 )   
 
         user_dict = {"user_name": name.decode('ascii'),
-                     "user_pass": base64.b64encode(derived_key).decode('ascii'),
+                     "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encrip
                      "user_tokens": tokens.decode('ascii'),
                      "user_total_tokens_offered": offers.decode('ascii'),
-                     "user_salt": base64.b64encode(salt).decode('ascii'),
+                     "user_salt": base64.b64encode(salt).decode('ascii'), # no encript
                      "user_totp_key": base64.b64encode(totp_key).decode('ascii'),
                      "attempts_pass": [0, time.time()],
                      "attempts_code": [0, time.time()]

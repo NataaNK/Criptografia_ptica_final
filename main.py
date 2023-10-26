@@ -1,6 +1,6 @@
 
 from criptografia import Criptografia
-from RSA import RSA
+from rsa import RSA
 from app import App
 from pathlib import Path
 import json
