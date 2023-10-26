@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import os
 import time
+import base64
 from criptografia import Criptografia
 from rsa import RSA
 
@@ -64,14 +65,15 @@ class App(tk.Frame):
         
         # ---------------- ALMACENAMIENTO DE CONTRASEÑAS CON KDC Y SALT ----------------
         
-        # Guardamos la clave derivada haciendo uso de KDF
-        self.cripto.KDF_password_storage(
+        # Guardamos la clave derivada haciendo uso de KDF y los datos encriptados con RSA
+        self.cripto.data_storage(
                             self.rsa.encrypt_with_public_key(self.username.get()),
                             self.password.get(),
                             self.rsa.encrypt_with_public_key("5000"),
                             self.rsa.encrypt_with_public_key("0"),
                             self.rsa.public_key
                             )
+
         self.__clear_frame()
         
         # ------- AUTENTICACIÓN EN DOS PASOS - QR PARA OBTENER CLAVES TEMPORALES ---------
@@ -110,7 +112,8 @@ class App(tk.Frame):
 
         # Comprobamos si el usuario está bloqueado o lo bloqueamos
         # si supera los 6 intentos permitidos
-        self.maximum_attempts(self.counter_pass, "pass")
+        if (not self.maximum_attempts(self.counter_pass, "pass")):
+            return
         
         
         # Comprobamos la contraseña
@@ -119,6 +122,24 @@ class App(tk.Frame):
             self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] += 1
             self.__sign_in_clicked()
             return
+        
+        # ------------- CON CADA INICIO DE SESIÓN CAMBIAMOS EL SALT 
+        derived_key_and_salt = self.cripto.KDF_derived_key_generate(self.password.get())
+        self.cripto.user_data_list[self.cripto.n_dict]["user_pass"] = base64.b64encode(derived_key_and_salt[0]).decode('ascii')
+        self.cripto.user_data_list[self.cripto.n_dict]["user_salt"] = base64.b64encode(derived_key_and_salt[1]).decode('ascii')      
+
+        # Actualizamos la base de datos
+        # Actualizamos los atributos attempts
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
         
         self.__sign_in_input_authen_2()
 
@@ -132,7 +153,8 @@ class App(tk.Frame):
         self.counter_code = self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][0]
         # Comprobamos si el usuario está bloqueado o lo bloqueamos
         # si supera los 6 intentos permitidos
-        self.maximum_attempts(self.counter_code, "code")
+        if (not self.maximum_attempts(self.counter_code, "code")):
+            return
 
         if(not self.cripto.TOKEN_verify_code(self.code.get())):
             self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][0] += 1
@@ -146,6 +168,8 @@ class App(tk.Frame):
     # --------------------- PREVISIÓN DE ATAQUES A FUERZA BRUTA ----------------------
 
     def maximum_attempts(self, counter: int, type: str):
+        
+        ret = True
         # Comprobamos si el usuario está bloquedo
         try:
             with open(BLOCKED_USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
@@ -155,7 +179,8 @@ class App(tk.Frame):
 
         n_block_dict = 0
         for dicti in user_blocked_list:
-            if dicti["user_name"] == self.cripto.user_data_list[self.cripto.n_dict]["user_name"]:
+            if self.cripto.decrypt_with_private_key(dicti["user_name"]).decode('ascii') == \
+            self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii'):
                 if (time.time()-float(dicti["blocked_time"]) > BLOCKED_TIME): 
                     del user_blocked_list[n_block_dict]
                     with open(BLOCKED_USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
@@ -163,6 +188,7 @@ class App(tk.Frame):
                 else:
                     messagebox.showerror("Sign In Error", "Too many attempts, try again later")
                     self.main()
+                    ret = False
             n_block_dict += 1
 
         # Tras 6 intentos bloqueamos la cuenta para evitar un posible ataque por fuerza bruta
@@ -187,6 +213,7 @@ class App(tk.Frame):
 
             messagebox.showerror("Sign In Error", "Too many attempts, try again later")
             self.main()
+            ret = False
         
         # Actualizamos los atributos attempts
         try:
@@ -199,8 +226,8 @@ class App(tk.Frame):
         user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
         with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(user_data_list, file, indent=2)
-
-        
+  
+        return ret
 
     
     # ---------------------- HACER OFERTAS y GUARDARLAS ----------------------------
@@ -209,8 +236,13 @@ class App(tk.Frame):
 
     def __confirm_offer(self):
         # Obtenemos los valores del entry
-        self.offer_tokens = int(self.entry_tokens.get())
-        self.offer_price = int(self.entry_priced.get())
+        try:
+            self.offer_tokens = int(self.entry_tokens.get())
+            self.offer_price = int(self.entry_priced.get())
+        except ValueError:
+            messagebox.showerror("Offer Error", "Incorrect value, must be an integer")
+            self.__make_offer_clicked()
+            return
         user_tokens = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))
         user_total_tokens_offered = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"]).decode('ascii'))
         user_total_tokens_offered += self.offer_tokens

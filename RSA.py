@@ -59,6 +59,7 @@ class RSA:
                         )
             )    
 
+        print("\nMENSAJE DE DEPURACIÓN DEL CIFRADO: Encriptado con la clave pública (tamaño=2048) del servidor usando RSA\n", str(ciphertext)+"\n")
         return base64.b64encode(ciphertext)       
 
     

@@ -24,20 +24,13 @@ class Criptografia:
             patron = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[-@$_!%*?&])[A-Za-z\d@$_!-%*?&]{8,}$"
             return bool(re.match(patron, contra))
     
-
-    def KDF_password_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key):
-        # Salt: random string, recommended bytes -> 128b=16B
-        salt = os.urandom(16)
-        KDF = Scrypt(
-                    salt=salt,
-                    length=32,
-                    n=2**14,
-                    r=8,
-                    p=1,
-                    )
-        
-        # Obtenemos la clave derivada
-        derived_key = KDF.derive(contra.encode('ascii')) 
+ 
+    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key):
+       
+        # Generamos la contraseña derivada KDF a partir del salt
+        derived_key_and_salt = self.KDF_derived_key_generate(contra)
+        derived_key = derived_key_and_salt[0]
+        salt = derived_key_and_salt[1]
 
         # Generamos el QR de la autenticación en dos pasos y guardamos la 
         # key encriptada para futuras comprobaciones
@@ -53,7 +46,7 @@ class Criptografia:
         # Generamos la etiqueta de autenticación del usuario y la guardamos
         # encriptada
         hmac_key = public_key.encrypt(
-                self.HMAC_hash_signature_generate(),
+                base64.b64encode(self.HMAC_hash_signature_generate()),
                 padding.OAEP(
                             mgf=padding.MGF1(algorithm=hashes.SHA256()),
                             algorithm=hashes.SHA256(),
@@ -71,11 +64,31 @@ class Criptografia:
                      "attempts_pass": [0, time.time()],
                      "attempts_code": [0, time.time()]
                      }
+        
         self.user_data_list.append(user_dict)
         with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(self.user_data_list, file, indent=2)
+            
+        print("\nMENSAJE DE DEPURACIÓN DEL STORAGE: datos del usuario guardados correctamente \n", str(self.cripto.user_data_list[self.cripto.n_dict]) + "\n")
 
 
+    def KDF_derived_key_generate(self, contra):
+        # Salt: random string, recommended bytes -> 128b=16B
+        salt = os.urandom(16)
+        KDF = Scrypt(
+                    salt=salt,
+                    length=32,
+                    n=2**14,
+                    r=8,
+                    p=1,
+                    )
+        
+        # Obtenemos la clave derivada
+        derived_key = KDF.derive(contra.encode('ascii')) 
+
+        print("\nMENSAJE DE DEPURACIÓN: clave derivada obtenida con una KDF \n", str(derived_key) + "\n")
+        return derived_key, salt
+    
 
     def TOKEN_code_authenticator_qr(self, user_name: str):
 
@@ -88,6 +101,7 @@ class Criptografia:
         # Generar un código QR
         qrcode.make(totp_auth).save(str(Path.cwd()) + "/assets/images/qr_temp.png")
 
+        print("\nMENSAJE DE DEPURACIÓN: QR generado correctamente a partir de un totp \n", str(totp_auth) + "\n")
         return k
     
 
@@ -154,6 +168,7 @@ class Criptografia:
         )
         return private_key
     
+    
     def decrypt_with_private_key(self, ciphertext: bytes):
         private_key = self.private_key_load()
 
@@ -165,9 +180,10 @@ class Criptografia:
                 label=None
             )
         )
-
+    
         return plaintext
     
+
     def HMAC_hash_signature_generate(self):
         key_hmac = os.urandom(32) # 32 bytes = 256 bits para SHA256
 
@@ -178,6 +194,7 @@ class Criptografia:
         h.update(bytes(message, 'ascii'))
         signature = h.finalize()
 
+        print("\nMENSAJE DE DEPURACIÓN: firma generada correctamente con HMAC (tamaño de la clave=256)\n", str(signature) + "\n")
         return signature
 
     def HMAC_label_authentication_verify(self, message, signature, hmac_key):

@@ -28,7 +28,7 @@ for dicti in user_data_list:
     dicti["user_tokens"] = cripto.decrypt_with_private_key(dicti["user_tokens"]).decode('ascii')
     dicti["user_total_tokens_offered"] = cripto.decrypt_with_private_key(dicti["user_total_tokens_offered"]).decode('ascii')
     dicti["user_totp_key"] = cripto.decrypt_with_private_key(dicti["user_totp_key"]).decode('ascii')
-    dicti["user_hmac_key"] = cripto.decrypt_with_private_key(dicti["user_hmac_key"])
+    dicti["user_hmac_key"] = cripto.decrypt_with_private_key(dicti["user_hmac_key"]).decode('ascii')
      
      
 # offers.json
@@ -62,7 +62,7 @@ for dicti in user_data_list:
     dicti["user_tokens"] = criptosistema.encrypt_with_public_key(dicti["user_tokens"]).decode('ascii')
     dicti["user_total_tokens_offered"] = criptosistema.encrypt_with_public_key(dicti["user_total_tokens_offered"]).decode('ascii')
     dicti["user_totp_key"] = criptosistema.encrypt_with_public_key(dicti["user_totp_key"]).decode('ascii')
-    dicti["user_hmac_key"] = criptosistema.encrypt_with_public_key(base64.b64encode(dicti["user_hmac_key"])).decode('ascii')
+    dicti["user_hmac_key"] = criptosistema.encrypt_with_public_key(dicti["user_hmac_key"]).decode('ascii')
 
 # offers.json
 for dicti in offers_data_list:
