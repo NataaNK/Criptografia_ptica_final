@@ -205,7 +205,7 @@ class App(tk.Frame):
     
     # ---------------------- HACER OFERTAS y GUARDARLAS ----------------------------
 
-    # ------------------ ETIQUETAS DE AUTENTICACIÓN - HMAC-----------------------------------
+    # ---------------------- GENERAR ETIQUETA DE AUTENTICACIÓN - VENDEDOR ---------------------
 
     def __confirm_offer(self):
         # Obtenemos los valores del entry
@@ -241,12 +241,31 @@ class App(tk.Frame):
             with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                 json.dump(data_list, file, indent=2)
 
-            self.__publish_offer()
+            # Generamos el hash signature mediante el mesaje (oferta) que será:
+            # user_name, tokens_offered, price_offered
+            oferta = str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + \
+                     str(self.offer_tokens) + str(self.offer_price)
+            signature = self.cripto.HMAC_label_authentication_generate(oferta, 
+                        self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))
 
+            self.__publish_offer(signature)
 
-    def __publish_offer(self):
+    # ------------------ COMPROBAR ETIQUETAS DE AUTENTICACIÓN - VENDEDOR -----------------------------------
 
-       # Guardamos la oferta en el json
+    def __publish_offer(self, signature):
+
+        # Antes de publicar la oferta comprobamos su autenticidad e integridad
+        # mediante la verificación del HASH HMAC
+        if(not self.cripto.HMAC_label_authentication_verify(
+                str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + str(self.offer_tokens) + str(self.offer_price), 
+                signature,
+                self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))):
+            
+            messagebox.showerror("Offer Error", "The data provided may have been corrupted, please try again")
+            self.__make_offer_clicked()
+            return
+
+        # Guardamos la oferta en el json con su signature
         try:
             with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
                 self.offer_list = json.load(file)
@@ -256,7 +275,7 @@ class App(tk.Frame):
         offer_dict = {"user_seller": self.cripto.user_data_list[self.cripto.n_dict]["user_name"], # Ya está encriptado
                       "tokens_offered": self.offer_tokens,
                       "price_offered": self.offer_price, 
-                       "accepted_offer": False}
+                      "accepted_offer": False}
         self.offer_list.append(offer_dict)
         with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(self.offer_list, file, indent=2)
@@ -267,165 +286,7 @@ class App(tk.Frame):
 
     # ------------------ COMPRAR Y VENDER TOKENS OFERTADOS -------------------
 
-    # ------------------ ETIQUETAS DE AUTENTICACIÓN - HMAC-----------------------------------
-
-    # Define la función que se llamará cuando se haga clic en una oferta
-    def __accept_offer(self, index: int, tokens_offered, price_offered):
-        # Le sumamos los tokens al comprador
-        messagebox.showinfo("Purchase Information", "Purchase Completed Successfully")
-        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
-        self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))+\
-                                         int(tokens_offered))).decode('ascii')
-
-        # Mediante index, podemos obtener el diccionario de la oferta
-        # y marcarla como aceptada
-        self.offer_list[index]["accepted_offer"] = "Your offer of " + tokens_offered + "✪ for the price of " + price_offered + \
-                                                    "€ has been accepted" 
-        # Lo actualizamos en la base de datos
-        try:
-            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                user_data_list = json.load(file)
-        except FileNotFoundError:
-            user_data_list = []
- 
-        del user_data_list[self.cripto.n_dict]
-        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
-        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(user_data_list, file, indent=2)
-
-        try:
-            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                offers_list = json.load(file)
-        except FileNotFoundError:
-            offers_list = []
-
-        del offers_list[index]
-        offers_list.insert(index, self.offer_list[index])
-        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(offers_list, file, indent=2)
-
-        self.__open_home_window()   
-
-    # Se llama cuando una de tus ofertas a sido aceptada
-    def __sell_offer(self, tokens_offered):
-        # Restamos los tokens vendidos
-        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
-        self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))-\
-                                         int(tokens_offered))).decode('ascii')
-        
-        # Lo actualizamos en la base de datos
-        try:
-            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                user_data_list = json.load(file)
-        except FileNotFoundError:
-            user_data_list = []
-
-        del user_data_list[self.cripto.n_dict]
-        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
-        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(user_data_list, file, indent=2)
-
-        self.__open_home_window()  
-
-        
-    # ------------------------- INTERFAZ --------------------------------------------
-
-    def main(self):
-
-        self.__clear_frame()
-        # Título de la pestaña
-        self.root.title("Tokens Market")
-
-        # Mensaje de primera pestaña
-        lbl = Label(self.root, text = "Do you want to sign up or sign in?")
-        lbl.place(relx=0.35, rely=0.4)
-        
-        self.__sign_up()
-        self.__sign_in()
-
-
-    def __clear_frame(self):
-
-        for widgets in self.root.winfo_children():
-            widgets.destroy()
-
-
-    def __sign_up(self):
-
-        # Botón de sing up
-        btn = Button(self.root, text = "Sign up", fg = "blue", command=self.__sign_up_clicked)   
-        # Posición del botón en la pantalla
-        btn.place(relx=0.4, rely=0.5)
-
-
-    def __sign_up_clicked(self):
-
-        # Ventana de registro
-        self.__clear_frame()
-        self.root.title("Tokens Market - Sign Up")
-        # Nombre de usuario
-        lbl = Label(self.root, text = "Username")
-        lbl.place(relx=0.35, rely=0.4)
-        self.username = Entry(self.root, width=10)
-        self.username.place(relx=0.5, rely=0.4)
-        # Contraseña
-        lbl = Label(self.root, text = "Password")
-        lbl.place(relx=0.35, rely=0.5)
-        self.password = Entry(self.root, width=10)
-        self.password.place(relx=0.5, rely=0.5)
-        # Botón de enviar
-        btn1 = Button(self.root, text = "CREATE ACCOUNT", fg = "green", command=self.__create_account_clicked)   
-        btn1.place(relx=0.65, rely=0.5)
-        btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
-        btn2.place(relx=0.1, rely=0.1)
-    
-    def __register_success(self):
-
-        os.remove(str(Path.cwd()) + "/assets/images/qr_temp.png")
-        # Confirmación de registro correcto
-        messagebox.showinfo("Registration Information", "Register Completed Successfully")
-        self.__open_home_window()
-
-    def __sign_in(self):
-
-        # Botón de sing up
-        btn = Button(self.root, text = "Sign in", fg = "green", command=self.__sign_in_clicked)   
-        btn.place(relx=0.55, rely=0.5)
-
-
-    def __sign_in_clicked(self):
-
-        # Ventana de registro
-        self.__clear_frame()
-        self.root.title("Tokens Market - Sign In")
-        # Nombre de usuario
-        lbl = Label(self.root, text = "Username")
-        lbl.place(relx=0.35, rely=0.4)
-        self.username = Entry(self.root, width=10)
-        self.username.place(relx=0.5, rely=0.4)
-        # Contraseña
-        lbl = Label(self.root, text = "Password")
-        lbl.place(relx=0.35, rely=0.5)
-        self.password = Entry(self.root, width=10)
-        self.password.place(relx=0.5, rely=0.5)
-        # Botón de enviar
-        btn1 = Button(self.root, text = "CONFIRM", fg = "green", command=self.__sign_in_authentication_1)   
-        btn1.place(relx=0.65, rely=0.5)
-        btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
-        btn2.place(relx=0.1, rely=0.1)
-
-    def __sign_in_input_authen_2(self):
-        
-        self.__clear_frame()
-        self.root.title("Tokens Market - Two-factor authentication")
-        # Clave temporal
-        lbl = Label(self.root, text = "Code")
-        lbl.place(relx=0.35, rely=0.4)
-        self.code = Entry(self.root, width=10)
-        self.code.place(relx=0.5, rely=0.4)
-        # Botón de enviar
-        btn = Button(self.root, text = "CONFIRM", fg = "green", command=self.__sign_in_authentication_2)   
-        btn.place(relx=0.65, rely=0.5)
+    # ------------------ GENERAR ETIQUETAS DE AUTENTICACIÓN - COMPRADOR -----------------------------------
 
     def __open_home_window(self):
 
@@ -536,14 +397,186 @@ class App(tk.Frame):
                 index = int(tree.index(selected_item))
                 tokens_offered = tree.item(selected_item, "values")[0]
                 price_offered = tree.item(selected_item, "values")[1]
-                self.__accept_offer(index, tokens_offered, price_offered)
+                # Generamos el hash siganture HMAC siendo el mensaje la oferta 
+                # a aceptar y el usuario comprador: user_name, tokens, price
+                compra = str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) +\
+                         str(tokens_offered) + str(price_offered)
+                signature = self.cripto.HMAC_label_authentication_generate(compra,
+                            self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))
+                self.__accept_offer(index, tokens_offered, price_offered, signature)
                 return
 
         # Asocia la función offer_clicked al evento de clic en el Treeview
         tree.bind("<ButtonRelease-1>", offer_clicked)
         
-       
+    # ------------------ COMPROBAR ETIQUETA DE AUTENTICACIÓN - COMPRADOR ---------------
+
+    # Define la función que se llamará cuando se haga clic en una oferta
+    def __accept_offer(self, index: int, tokens_offered, price_offered, signature):
+
+        # Comprobamos que la información no se ha corrompido y autenticamos
+        # su origen, comprobando el hash HMAC (signature)
+        if(not self.cripto.HMAC_label_authentication_verify(
+                str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + str(tokens_offered) + str(price_offered), 
+                signature,
+                self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))):
+            
+            messagebox.showerror("Purchase Error", "The request to accept an offer may have been corrupted, please try again")
+            self.__make_offer_clicked()
+            return
+
+        # Le sumamos los tokens al comprador
+        messagebox.showinfo("Purchase Information", "Purchase Completed Successfully")
+        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
+        self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))+\
+                                         int(tokens_offered))).decode('ascii')
+
+        # Mediante index, podemos obtener el diccionario de la oferta
+        # y marcarla como aceptada
+        self.offer_list[index]["accepted_offer"] = "Your offer of " + tokens_offered + "✪ for the price of " + price_offered + \
+                                                    "€ has been accepted" 
+        # Lo actualizamos en la base de datos
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+ 
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
+
+        try:
+            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                offers_list = json.load(file)
+        except FileNotFoundError:
+            offers_list = []
+
+        del offers_list[index]
+        offers_list.insert(index, self.offer_list[index])
+        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(offers_list, file, indent=2)
+
+        self.__open_home_window()   
+
+    # Se llama cuando una de tus ofertas a sido aceptada
+    def __sell_offer(self, tokens_offered):
+        # Restamos los tokens vendidos
+        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
+        self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))-\
+                                         int(tokens_offered))).decode('ascii')
         
+        # Lo actualizamos en la base de datos
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
+
+        self.__open_home_window()  
+
+        
+    # ------------------------- INTERFAZ --------------------------------------------
+
+    def main(self):
+
+        self.__clear_frame()
+        # Título de la pestaña
+        self.root.title("Tokens Market")
+
+        # Mensaje de primera pestaña
+        lbl = Label(self.root, text = "Do you want to sign up or sign in?")
+        lbl.place(relx=0.35, rely=0.4)
+        
+        self.__sign_up()
+        self.__sign_in()
+
+    def __clear_frame(self):
+
+        for widgets in self.root.winfo_children():
+            widgets.destroy()
+
+    def __sign_up(self):
+
+        # Botón de sing up
+        btn = Button(self.root, text = "Sign up", fg = "blue", command=self.__sign_up_clicked)   
+        # Posición del botón en la pantalla
+        btn.place(relx=0.4, rely=0.5)
+
+    def __sign_up_clicked(self):
+
+        # Ventana de registro
+        self.__clear_frame()
+        self.root.title("Tokens Market - Sign Up")
+        # Nombre de usuario
+        lbl = Label(self.root, text = "Username")
+        lbl.place(relx=0.35, rely=0.4)
+        self.username = Entry(self.root, width=10)
+        self.username.place(relx=0.5, rely=0.4)
+        # Contraseña
+        lbl = Label(self.root, text = "Password")
+        lbl.place(relx=0.35, rely=0.5)
+        self.password = Entry(self.root, width=10)
+        self.password.place(relx=0.5, rely=0.5)
+        # Botón de enviar
+        btn1 = Button(self.root, text = "CREATE ACCOUNT", fg = "green", command=self.__create_account_clicked)   
+        btn1.place(relx=0.65, rely=0.5)
+        btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
+        btn2.place(relx=0.1, rely=0.1)
+    
+    def __register_success(self):
+
+        os.remove(str(Path.cwd()) + "/assets/images/qr_temp.png")
+        # Confirmación de registro correcto
+        messagebox.showinfo("Registration Information", "Register Completed Successfully")
+        self.__open_home_window()
+
+    def __sign_in(self):
+
+        # Botón de sing up
+        btn = Button(self.root, text = "Sign in", fg = "green", command=self.__sign_in_clicked)   
+        btn.place(relx=0.55, rely=0.5)
+
+    def __sign_in_clicked(self):
+
+        # Ventana de registro
+        self.__clear_frame()
+        self.root.title("Tokens Market - Sign In")
+        # Nombre de usuario
+        lbl = Label(self.root, text = "Username")
+        lbl.place(relx=0.35, rely=0.4)
+        self.username = Entry(self.root, width=10)
+        self.username.place(relx=0.5, rely=0.4)
+        # Contraseña
+        lbl = Label(self.root, text = "Password")
+        lbl.place(relx=0.35, rely=0.5)
+        self.password = Entry(self.root, width=10)
+        self.password.place(relx=0.5, rely=0.5)
+        # Botón de enviar
+        btn1 = Button(self.root, text = "CONFIRM", fg = "green", command=self.__sign_in_authentication_1)   
+        btn1.place(relx=0.65, rely=0.5)
+        btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
+        btn2.place(relx=0.1, rely=0.1)
+
+    def __sign_in_input_authen_2(self):
+        
+        self.__clear_frame()
+        self.root.title("Tokens Market - Two-factor authentication")
+        # Clave temporal
+        lbl = Label(self.root, text = "Code")
+        lbl.place(relx=0.35, rely=0.4)
+        self.code = Entry(self.root, width=10)
+        self.code.place(relx=0.5, rely=0.4)
+        # Botón de enviar
+        btn = Button(self.root, text = "CONFIRM", fg = "green", command=self.__sign_in_authentication_2)   
+        btn.place(relx=0.65, rely=0.5)
+       
     def __make_offer_clicked(self):
         # Abrimos pestaña de hacer oferta
         self.__clear_frame()

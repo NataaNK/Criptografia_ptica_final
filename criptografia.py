@@ -53,7 +53,7 @@ class Criptografia:
         # Generamos la etiqueta de autenticación del usuario y la guardamos
         # encriptada
         hmac_key = public_key.encrypt(
-                bytes(self.HMAC_hash_signature_generate(), 'ascii'),
+                self.HMAC_hash_signature_generate(),
                 padding.OAEP(
                             mgf=padding.MGF1(algorithm=hashes.SHA256()),
                             algorithm=hashes.SHA256(),
@@ -62,7 +62,7 @@ class Criptografia:
                 )
 
         user_dict = {"user_name": name.decode('ascii'),
-                     "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encrip
+                     "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encript
                      "user_tokens": tokens.decode('ascii'),
                      "user_total_tokens_offered": offers.decode('ascii'),
                      "user_salt": base64.b64encode(salt).decode('ascii'), # no encript
@@ -175,7 +175,7 @@ class Criptografia:
         
     def HMAC_label_authentication_generate(self, message, hmac_key):
         h = hmac.HMAC(hmac_key, hashes.SHA256())
-        h.update(message)
+        h.update(bytes(message, 'ascii'))
         signature = h.finalize()
 
         return signature
@@ -183,7 +183,7 @@ class Criptografia:
     def HMAC_label_authentication_verify(self, message, signature, hmac_key):
 
         h = hmac.HMAC(hmac_key, hashes.SHA256())
-        h.update(message)
+        h.update(bytes(message, 'ascii'))
 
         try:
             h.verify(signature)
