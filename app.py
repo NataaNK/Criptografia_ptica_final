@@ -142,6 +142,7 @@ class App(tk.Frame):
         self.__open_home_window()
 
 
+    # --------------------- PREVISIÓN DE ATAQUES A FUERZA BRUTA ----------------------
 
     def maximum_attempts(self, counter: int, type: str):
         # Comprobamos si el usuario está bloquedo
@@ -201,14 +202,14 @@ class App(tk.Frame):
         
 
     
-    # ---------------------- CERTIFICADO - HACER OFERTAS y GUARDARLAS ----------------------------
+    # ---------------------- HACER OFERTAS y GUARDARLAS ----------------------------
 
     def __confirm_offer(self):
         # Obtenemos los valores del entry
         self.offer_tokens = float(self.entry_tokens.get())
         self.offer_price = float(self.entry_priced.get())
-        user_tokens = self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"])
-        user_total_tokens_offered = self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"])
+        user_tokens = float(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))
+        user_total_tokens_offered = float(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"]).decode('ascii'))
         user_total_tokens_offered += self.offer_tokens
         
 
@@ -225,7 +226,7 @@ class App(tk.Frame):
             return
         else:
 
-            self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"] = self.rsa.encrypt_with_public_key(user_total_tokens_offered)
+            self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"] = self.rsa.encrypt_with_public_key(str(user_total_tokens_offered)).decode('ascii')
 
             try:
                 with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
@@ -250,7 +251,7 @@ class App(tk.Frame):
         except FileNotFoundError:
             self.offer_list = []
 
-        offer_dict = {"user_seller": self.cripto.user_data_list[self.cripto.n_dict]["user_name"],
+        offer_dict = {"user_seller": self.rsa.encrypt_with_public_key(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii')).decode('ascii'),
                       "tokens_offered": self.offer_tokens,
                       "price_offered": self.offer_price}
         self.offer_list.append(offer_dict)
@@ -258,6 +259,12 @@ class App(tk.Frame):
             json.dump(self.offer_list, file, indent=2)
         
         self.__open_home_window()
+
+
+
+    # ------------------ COMPRAR Y VENDER TOKENS OFERTADOS -------------------
+
+
 
         
     # ------------------------- INTERFAZ --------------------------------------------
@@ -440,12 +447,11 @@ class App(tk.Frame):
         self.entry_tokens = Entry(self.root, textvariable=Var_text_tokens, 
                        width=20, fg="grey")
         self.entry_tokens.place(relx=0.5, rely=0.4)
-        self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]))
+        self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))
         
-        # El texto escrito deberia ser negro pero es gris como lo q se superpone
         self.entry_tokens.bind("<FocusIn>", lambda event: self.entry_tokens.delete(0,"end")
-                    if Var_text_tokens.get() == "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]) else None)
-        self.entry_tokens.bind("<FocusOut>", lambda event: self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"])) 
+                    if Var_text_tokens.get() == "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii') else None)
+        self.entry_tokens.bind("<FocusOut>", lambda event: self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii')) 
                     if Var_text_tokens.get() == "" else None)
         
         self.entry_priced = Entry(self.root, textvariable=Var_text_price,width=20,fg="grey")
