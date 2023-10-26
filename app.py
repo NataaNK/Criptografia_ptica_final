@@ -10,6 +10,7 @@ from criptografia import Criptografia
 from rsa import RSA
 
 
+
 # GLOBAL VARIABLES  
 USERS_JSON_FILE_PATH =  str(Path.cwd()) + "/data/users.json"
 OFFERS_JSON_FILE_PATH = str(Path.cwd()) + "/data/offers.json"
@@ -204,6 +205,8 @@ class App(tk.Frame):
     
     # ---------------------- HACER OFERTAS y GUARDARLAS ----------------------------
 
+    # ------------------ ETIQUETAS DE AUTENTICACIÓN - HMAC-----------------------------------
+
     def __confirm_offer(self):
         # Obtenemos los valores del entry
         self.offer_tokens = int(self.entry_tokens.get())
@@ -264,8 +267,10 @@ class App(tk.Frame):
 
     # ------------------ COMPRAR Y VENDER TOKENS OFERTADOS -------------------
 
+    # ------------------ ETIQUETAS DE AUTENTICACIÓN - HMAC-----------------------------------
+
     # Define la función que se llamará cuando se haga clic en una oferta
-    def accept_offer(self, index: int, tokens_offered, price_offered):
+    def __accept_offer(self, index: int, tokens_offered, price_offered):
         # Le sumamos los tokens al comprador
         messagebox.showinfo("Purchase Information", "Purchase Completed Successfully")
         self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
@@ -302,7 +307,7 @@ class App(tk.Frame):
         self.__open_home_window()   
 
     # Se llama cuando una de tus ofertas a sido aceptada
-    def sell_offer(self, tokens_offered):
+    def __sell_offer(self, tokens_offered):
         # Restamos los tokens vendidos
         self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
         self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))-\
@@ -489,7 +494,7 @@ class App(tk.Frame):
                 with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                     json.dump(self.offer_list, file, indent=2)
                 # Avisamos al vendedor de que ha sido aceptada su oferta y realizamos la transacción
-                self.sell_offer(dicti["tokens_offered"])
+                self.__sell_offer(dicti["tokens_offered"])
                 return
             elif (not dicti["accepted_offer"]) and ((self.cripto.decrypt_with_private_key(dicti["user_seller"]).decode('ascii') == \
              self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii'))):
@@ -515,7 +520,7 @@ class App(tk.Frame):
                 self.__open_home_window()
                 return
             
-            # Si la oferta es tuya no peudes aceptarla
+            # Si la oferta es tuya no puedes aceptarla
             if tree.item(selected_item, "values")[0][0] == "¡":
                 messagebox.showerror("Purchase Offer", "You can't accept your own offers")
                 self.__open_home_window()
@@ -531,7 +536,7 @@ class App(tk.Frame):
                 index = int(tree.index(selected_item))
                 tokens_offered = tree.item(selected_item, "values")[0]
                 price_offered = tree.item(selected_item, "values")[1]
-                self.accept_offer(index, tokens_offered, price_offered)
+                self.__accept_offer(index, tokens_offered, price_offered)
                 return
 
         # Asocia la función offer_clicked al evento de clic en el Treeview

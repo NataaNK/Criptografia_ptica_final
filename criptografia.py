@@ -6,9 +6,8 @@ import time
 from pathlib import Path
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 import cryptography.exceptions
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes
 import pyotp
 import qrcode
 
@@ -50,6 +49,17 @@ class Criptografia:
                             label=None
                             )
                 )   
+        
+        # Generamos la etiqueta de autenticación del usuario y la guardamos
+        # encriptada
+        hmac_key = public_key.encrypt(
+                bytes(self.HMAC_hash_signature_generate(), 'ascii'),
+                padding.OAEP(
+                            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                            algorithm=hashes.SHA256(),
+                            label=None
+                            )
+                )
 
         user_dict = {"user_name": name.decode('ascii'),
                      "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encrip
@@ -57,6 +67,7 @@ class Criptografia:
                      "user_total_tokens_offered": offers.decode('ascii'),
                      "user_salt": base64.b64encode(salt).decode('ascii'), # no encript
                      "user_totp_key": base64.b64encode(totp_key).decode('ascii'),
+                     "user_hmac_key": base64.b64encode(hmac_key).decode('ascii'),
                      "attempts_pass": [0, time.time()],
                      "attempts_code": [0, time.time()]
                      }
@@ -156,3 +167,28 @@ class Criptografia:
         )
 
         return plaintext
+    
+    def HMAC_hash_signature_generate(self):
+        key_hmac = os.urandom(32) # 32 bytes = 256 bits para SHA256
+
+        return key_hmac
+        
+    def HMAC_label_authentication_generate(self, message, hmac_key):
+        h = hmac.HMAC(hmac_key, hashes.SHA256())
+        h.update(message)
+        signature = h.finalize()
+
+        return signature
+
+    def HMAC_label_authentication_verify(self, message, signature, hmac_key):
+
+        h = hmac.HMAC(hmac_key, hashes.SHA256())
+        h.update(message)
+
+        try:
+            h.verify(signature)
+        except cryptography.exceptions.InvalidSignature:
+            return False
+        return True
+
+        
