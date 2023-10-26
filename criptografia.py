@@ -69,7 +69,7 @@ class Criptografia:
         with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(self.user_data_list, file, indent=2)
             
-        print("\nMENSAJE DE DEPURACIÓN DEL STORAGE: datos del usuario guardados correctamente \n", str(self.cripto.user_data_list[self.cripto.n_dict]) + "\n")
+        print("\nMENSAJE DE DEPURACIÓN DEL STORAGE: datos del usuario guardados correctamente \n", str(user_dict) + "\n")
 
 
     def KDF_derived_key_generate(self, contra):

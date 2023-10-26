@@ -334,7 +334,7 @@ class App(tk.Frame):
         # Nombre del usuario
         lbl = Label(self.root, text = self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]), 
                     bg="#424a57", fg="white", font=("Arial", 30))
-        lbl.place(relx=0.6, rely=0.05)
+        lbl.place(relx=0.5, rely=0.05)
         # Indicador de tokens
         coin_img_path = str(Path.cwd()) + "/assets/images/coin.png"
         coin = PhotoImage(file = coin_img_path)
