@@ -2,6 +2,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
+import cryptography.exceptions
 from pathlib import Path
 import base64
 # GLOBAL VARIABLES
@@ -61,5 +62,19 @@ class RSA:
 
         print("\nMENSAJE DE DEPURACIÓN DEL CIFRADO: Encriptado con la clave pública (tamaño=2048) del servidor usando RSA\n", str(ciphertext)+"\n")
         return base64.b64encode(ciphertext)       
-
     
+    def verify_signature_RSA_with_public_key(self, signature: bytes, message: str) -> bool:
+
+        try:
+            self.public_key.verify(
+            base64.b64decode(signature + b'=='),
+            bytes(message, 'ascii'),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+            )
+        except cryptography.exceptions.InvalidSignature:
+            return False
+        return True

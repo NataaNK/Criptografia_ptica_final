@@ -273,31 +273,31 @@ class App(tk.Frame):
             with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                 json.dump(data_list, file, indent=2)
 
-            # Generamos el hash signature mediante el mesaje (oferta) que será:
+            # Generamos el hash hmac mediante el mesaje (oferta) que será:
             # user_name, tokens_offered, price_offered
             oferta = str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + \
                      str(self.offer_tokens) + str(self.offer_price)
-            signature = self.cripto.HMAC_label_authentication_generate(oferta, 
+            hmac = self.cripto.HMAC_label_authentication_generate(oferta, 
                         self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))
 
-            self.__publish_offer(signature)
+            self.__publish_offer(hmac)
 
     # ------------------ COMPROBAR ETIQUETAS DE AUTENTICACIÓN - VENDEDOR -----------------------------------
 
-    def __publish_offer(self, signature):
+    def __publish_offer(self, hmac):
 
         # Antes de publicar la oferta comprobamos su autenticidad e integridad
         # mediante la verificación del HASH HMAC
         if(not self.cripto.HMAC_label_authentication_verify(
                 str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + str(self.offer_tokens) + str(self.offer_price), 
-                signature,
+                hmac,
                 self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))):
             
             messagebox.showerror("Offer Error", "The data provided may have been corrupted, please try again")
             self.__make_offer_clicked()
             return
 
-        # Guardamos la oferta en el json con su signature
+        # Guardamos la oferta en el json con su hmac
         try:
             with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
                 self.offer_list = json.load(file)
@@ -311,8 +311,11 @@ class App(tk.Frame):
         self.offer_list.append(offer_dict)
         with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(self.offer_list, file, indent=2)
-        
-        self.__open_home_window()
+
+        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
+        message = "Offer Published Successfully"
+        signature = self.cripto.signing_with_private_key_RSA(message)
+        self.__open_home_window(message, signature)
 
 
 
@@ -320,7 +323,19 @@ class App(tk.Frame):
 
     # ------------------ GENERAR ETIQUETAS DE AUTENTICACIÓN - COMPRADOR -----------------------------------
 
-    def __open_home_window(self):
+    def __open_home_window(self, message = None, signature = None): 
+
+        if message and signature:
+            # El usuario comprueba la integridad, autenticación y no repudio
+            # del mensaje del sistema comprobando su firma digital
+            if not self.rsa.verify_signature_RSA_with_public_key(signature, message):
+                messagebox.showerror("Corrupt Information", "We are having some security problems")
+                # Cerramos la aplicación para evitar un ataque
+                self.root.destroy()
+                return
+
+            # Mostramos el mensaje una vez confirmado
+            messagebox.showinfo("Information", message)
 
         # Abrimos pestaña de inicio
         self.__clear_frame()
@@ -433,9 +448,9 @@ class App(tk.Frame):
                 # a aceptar y el usuario comprador: user_name, tokens, price
                 compra = str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) +\
                          str(tokens_offered) + str(price_offered)
-                signature = self.cripto.HMAC_label_authentication_generate(compra,
+                hmac = self.cripto.HMAC_label_authentication_generate(compra,
                             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))
-                self.__accept_offer(index, tokens_offered, price_offered, signature)
+                self.__accept_offer(index, tokens_offered, price_offered, hmac)
                 return
 
         # Asocia la función offer_clicked al evento de clic en el Treeview
@@ -444,13 +459,13 @@ class App(tk.Frame):
     # ------------------ COMPROBAR ETIQUETA DE AUTENTICACIÓN - COMPRADOR ---------------
 
     # Define la función que se llamará cuando se haga clic en una oferta
-    def __accept_offer(self, index: int, tokens_offered, price_offered, signature):
+    def __accept_offer(self, index: int, tokens_offered, price_offered, hmac):
 
         # Comprobamos que la información no se ha corrompido y autenticamos
-        # su origen, comprobando el hash HMAC (signature)
+        # su origen, comprobando el hash HMAC (hmac)
         if(not self.cripto.HMAC_label_authentication_verify(
                 str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + str(tokens_offered) + str(price_offered), 
-                signature,
+                hmac,
                 self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"]))):
             
             messagebox.showerror("Purchase Error", "The request to accept an offer may have been corrupted, please try again")
@@ -458,13 +473,20 @@ class App(tk.Frame):
             return
 
         # Le sumamos los tokens al comprador
-        messagebox.showinfo("Purchase Information", "Purchase Completed Successfully")
+
+        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
+        message = "Purchase Completed Successfully"
+        signature = self.cripto.signing_with_private_key_RSA(message)
+
         self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
         self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))+\
                                          int(tokens_offered))).decode('ascii')
 
         # Mediante index, podemos obtener el diccionario de la oferta
         # y marcarla como aceptada
+
+        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
+        # TODO
         self.offer_list[index]["accepted_offer"] = "Your offer of " + tokens_offered + "✪ for the price of " + price_offered + \
                                                     "€ has been accepted" 
         # Lo actualizamos en la base de datos
@@ -490,7 +512,9 @@ class App(tk.Frame):
         with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(offers_list, file, indent=2)
 
-        self.__open_home_window()   
+        self.__open_home_window(message, signature)   
+
+
 
     # Se llama cuando una de tus ofertas a sido aceptada
     def __sell_offer(self, tokens_offered):
@@ -566,8 +590,11 @@ class App(tk.Frame):
 
         os.remove(str(Path.cwd()) + "/assets/images/qr_temp.png")
         # Confirmación de registro correcto
-        messagebox.showinfo("Registration Information", "Register Completed Successfully")
-        self.__open_home_window()
+
+        # -------------------- FRIMA DIGITAL DEL SITEMA ------------------
+        message = "Register Completed Successfully"
+        signature = self.cripto.signing_with_private_key_RSA(message)
+        self.__open_home_window(message, signature)
 
     def __sign_in(self):
 

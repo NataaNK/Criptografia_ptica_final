@@ -183,6 +183,20 @@ class Criptografia:
     
         return plaintext
     
+    def signing_with_private_key_RSA(self, message: str):
+        private_key = self.private_key_load()
+
+        signature = private_key.sign(
+            bytes(message, 'ascii'),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+        return signature
+    
 
     def HMAC_hash_signature_generate(self):
         key_hmac = os.urandom(32) # 32 bytes = 256 bits para SHA256
@@ -192,20 +206,20 @@ class Criptografia:
     def HMAC_label_authentication_generate(self, message, hmac_key):
         h = hmac.HMAC(hmac_key, hashes.SHA256())
         h.update(bytes(message, 'ascii'))
-        signature = h.finalize()
+        hmac_sig = h.finalize()
 
-        print("\nMENSAJE DE DEPURACIÓN: firma generada correctamente con HMAC (tamaño de la clave=256)\n", str(signature) + "\n")
-        return signature
+        print("\nMENSAJE DE DEPURACIÓN: firma generada correctamente con hmac_sig (tamaño de la clave=256)\n", str(hmac_sig) + "\n")
+        return hmac_sig
 
-    def HMAC_label_authentication_verify(self, message, signature, hmac_key):
+    def HMAC_label_authentication_verify(self, message, hmac_sig, hmac_key):
 
         h = hmac.HMAC(hmac_key, hashes.SHA256())
         h.update(bytes(message, 'ascii'))
 
         try:
-            h.verify(signature)
+            h.verify(hmac_sig)
         except cryptography.exceptions.InvalidSignature:
             return False
         return True
 
-        
+    
