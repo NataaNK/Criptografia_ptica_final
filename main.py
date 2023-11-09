@@ -4,7 +4,7 @@ from rsa import RSA
 from app import App
 from pathlib import Path
 import json
-import base64
+
 # GLOBAL VARIABLES  
 USERS_JSON_FILE_PATH =  str(Path.cwd()) + "/data/users.json"
 OFFERS_JSON_FILE_PATH = str(Path.cwd()) + "/data/offers.json"
@@ -79,8 +79,7 @@ with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file_users
 with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file_offers:
     json.dump(offers_data_list, file_offers, indent=2)
 with open(BLOCKED_USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file_blocked:
-    json.dump(blocked_data_list, file_blocked, indent=2)
-
+    json.dump(blocked_data_list, file_blocked, indent=2) 
 
 
 myapp = App(cripto, criptosistema)

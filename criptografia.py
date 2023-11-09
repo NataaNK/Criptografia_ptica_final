@@ -195,6 +195,7 @@ class Criptografia:
             hashes.SHA256()
         )
 
+        print("\nMENSAJE DE DEPURACIÓN: firma creada con RSA\n", str(signature),"\n")
         return signature
     
 
