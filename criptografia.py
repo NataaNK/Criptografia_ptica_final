@@ -183,6 +183,33 @@ class Criptografia:
     
         return plaintext
     
+
+    def HMAC_hash_signature_generate(self):
+        key_hmac = os.urandom(32) # 32 bytes = 256 bits para SHA256
+
+        return key_hmac
+        
+    def HMAC_label_authentication_generate(self, message, hmac_key):
+        h = hmac.HMAC(hmac_key, hashes.SHA256())
+        h.update(bytes(message, 'ascii'))
+        hmac_sig = h.finalize()
+
+        print("\nMENSAJE DE DEPURACIÓN: HMAC generado correctamente con hmac_sig (tamaño de la clave=256)\n", str(hmac_sig) + "\n")
+        return hmac_sig
+
+    def HMAC_label_authentication_verify(self, message, hmac_sig, hmac_key):
+
+        h = hmac.HMAC(hmac_key, hashes.SHA256())
+        h.update(bytes(message, 'ascii'))
+
+        try:
+            h.verify(hmac_sig)
+        except cryptography.exceptions.InvalidSignature:
+            return False
+        print("\nMENSAJE DE DEPURACIÓN: HMAC verificado correctamente con hmac_verify\n", "True\n")
+        return True
+
+
     def signing_with_private_key_RSA(self, message: str):
         private_key = self.private_key_load()
 
@@ -199,28 +226,6 @@ class Criptografia:
         return signature
     
 
-    def HMAC_hash_signature_generate(self):
-        key_hmac = os.urandom(32) # 32 bytes = 256 bits para SHA256
-
-        return key_hmac
-        
-    def HMAC_label_authentication_generate(self, message, hmac_key):
-        h = hmac.HMAC(hmac_key, hashes.SHA256())
-        h.update(bytes(message, 'ascii'))
-        hmac_sig = h.finalize()
-
-        print("\nMENSAJE DE DEPURACIÓN: firma generada correctamente con hmac_sig (tamaño de la clave=256)\n", str(hmac_sig) + "\n")
-        return hmac_sig
-
-    def HMAC_label_authentication_verify(self, message, hmac_sig, hmac_key):
-
-        h = hmac.HMAC(hmac_key, hashes.SHA256())
-        h.update(bytes(message, 'ascii'))
-
-        try:
-            h.verify(hmac_sig)
-        except cryptography.exceptions.InvalidSignature:
-            return False
-        return True
+    
 
     

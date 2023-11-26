@@ -91,6 +91,16 @@ class App(tk.Frame):
         btn = Button(self.root, text = "Siguiente", fg = "green", command=self.__register_success)   
         btn.place(relx=0.8, rely=0.8)
 
+
+    def __register_success(self):
+
+            os.remove(str(Path.cwd()) + "/assets/images/qr_temp.png")
+
+            # Confirmación de registro correcto
+            # -------------------- FIRMA DIGITAL DEL SITEMA -------------------
+            message = "Register Completed Successfully"
+            signature = self.cripto.signing_with_private_key_RSA(message)
+            self.__open_home_window(message, signature)
         
     # ------------------------------------- AUTENTICACIÓN -------------------------------------
 
@@ -307,7 +317,7 @@ class App(tk.Frame):
         offer_dict = {"user_seller": self.cripto.user_data_list[self.cripto.n_dict]["user_name"], # Ya está encriptado
                       "tokens_offered": self.offer_tokens,
                       "price_offered": self.offer_price, 
-                      "accepted_offer": False}
+                      "accepted_offer": [False, False]}
         self.offer_list.append(offer_dict)
         with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(self.offer_list, file, indent=2)
@@ -319,12 +329,11 @@ class App(tk.Frame):
 
 
 
-    # ------------------ COMPRAR Y VENDER TOKENS OFERTADOS -------------------
-
-    # ------------------ GENERAR ETIQUETAS DE AUTENTICACIÓN - COMPRADOR -----------------------------------
+    # ------------------ HOME WINDOW: BOTONES DE COMPRAR Y OFERTAR TOKENS ------------------
 
     def __open_home_window(self, message = None, signature = None): 
 
+        # ----------------- VERIFICACIÓN FIRMA DIGITAL DEL SISTEMA ---------------------------
         if message and signature:
             # El usuario comprueba la integridad, autenticación y no repudio
             # del mensaje del sistema comprobando su firma digital
@@ -377,13 +386,13 @@ class App(tk.Frame):
         scrollbar.grid(row=0, column=1, sticky='ns')
         scrollbar.place(relx=0.8, rely=0.15, width=20, height=500)
 
-         # Botón de hacer oferta
+        # Botón de hacer oferta
         btn2 = Button(self.root, text = "MAKE AN OFFER", fg = "green", 
                       command=self.__make_offer_clicked, font=("Arial", 20), 
                       bg = "#a89732")
         btn2.place(relx=0.5, rely=0.86)
 
-        # Insertamos las ofertas disponibles ne la lista
+        # Insertamos las ofertas disponibles en la lista
         try:
             with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
                 self.offer_list = json.load(file)
@@ -392,23 +401,34 @@ class App(tk.Frame):
         
         d = 0
         for dicti in self.offer_list:
-            if (dicti["accepted_offer"]) and \
+            if (dicti["accepted_offer"][0]) and \
             (self.cripto.decrypt_with_private_key(dicti["user_seller"]).decode('ascii') == \
              self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii')):
+                
+                # ----------------- VERIFICACIÓN FIRMA DIGITAL DEL SISTEMA ---------------------------
+                # El usuario comprueba la integridad, autenticación y no repudio
+                # del mensaje del sistema comprobando su firma digital
+                if not self.rsa.verify_signature_RSA_with_public_key(dicti["accepted_offer"][1], dicti["accepted_offer"][0]):
+                    messagebox.showerror("Corrupt Information", "We are having some security problems")
+                    # Cerramos la aplicación para evitar un ataque
+                    self.root.destroy()
+                    return
+
                 # Mostramos mensaje de oferta aceptada
-                messagebox.showinfo("Sale Information", dicti["accepted_offer"])
-                # Eliminamos la oferta de la base de dato
+                messagebox.showinfo("Sale Information", dicti["accepted_offer"][0])
+
+                # Eliminamos la oferta de la base de datos
                 del self.offer_list[d]
                 with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                     json.dump(self.offer_list, file, indent=2)
                 # Avisamos al vendedor de que ha sido aceptada su oferta y realizamos la transacción
                 self.__sell_offer(dicti["tokens_offered"])
                 return
-            elif (not dicti["accepted_offer"]) and ((self.cripto.decrypt_with_private_key(dicti["user_seller"]).decode('ascii') == \
+            elif (not dicti["accepted_offer"][0]) and ((self.cripto.decrypt_with_private_key(dicti["user_seller"]).decode('ascii') == \
              self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]).decode('ascii'))):
-                # Si la ofereta está disponible y es, la muestro indicando que es mía
+                # Si la ofereta está disponible y es mía, la muestro indicando que es mía
                 tree.insert("",END, values=("¡MINE! "+ str(dicti["tokens_offered"]), dicti["price_offered"]))
-            elif (not dicti["accepted_offer"]):
+            elif (not dicti["accepted_offer"][0]):
                 # Si la ofereta está disponible y no es mía, la muestro
                 tree.insert("",END, values=(dicti["tokens_offered"], dicti["price_offered"]))
             d+=1
@@ -440,6 +460,8 @@ class App(tk.Frame):
                 self.__open_home_window()
                 return
             
+             # ------------------ GENERAR ETIQUETAS DE AUTENTICACIÓN - COMPRADOR -----------------------------------
+
             if selected_item:
                 index = int(tree.index(selected_item))
                 tokens_offered = tree.item(selected_item, "values")[0]
@@ -456,6 +478,7 @@ class App(tk.Frame):
         # Asocia la función offer_clicked al evento de clic en el Treeview
         tree.bind("<ButtonRelease-1>", offer_clicked)
         
+
     # ------------------ COMPROBAR ETIQUETA DE AUTENTICACIÓN - COMPRADOR ---------------
 
     # Define la función que se llamará cuando se haga clic en una oferta
@@ -472,23 +495,26 @@ class App(tk.Frame):
             self.__make_offer_clicked()
             return
 
-        # Le sumamos los tokens al comprador
+        
 
         # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
-        message = "Purchase Completed Successfully"
-        signature = self.cripto.signing_with_private_key_RSA(message)
-
+        message_buy = "Purchase Completed Successfully"
+        signature_buy = self.cripto.signing_with_private_key_RSA(message_buy)
+        
+        # Le sumamos los tokens al comprador
         self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
         self.rsa.encrypt_with_public_key(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"]).decode('ascii'))+\
                                          int(tokens_offered))).decode('ascii')
 
+        
+        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
         # Mediante index, podemos obtener el diccionario de la oferta
         # y marcarla como aceptada
+        message_sell = str("Your offer of " + tokens_offered + "tokens for the price of " + price_offered + \
+                    "euros has been accepted")
+        signature_sell = self.cripto.signing_with_private_key_RSA(message_sell)
+        self.offer_list[index]["accepted_offer"] = [message_sell, base64.b64encode(signature_sell).decode('ascii')]
 
-        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
-        # TODO
-        self.offer_list[index]["accepted_offer"] = "Your offer of " + tokens_offered + "✪ for the price of " + price_offered + \
-                                                    "€ has been accepted" 
         # Lo actualizamos en la base de datos
         try:
             with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
@@ -512,7 +538,7 @@ class App(tk.Frame):
         with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
             json.dump(offers_list, file, indent=2)
 
-        self.__open_home_window(message, signature)   
+        self.__open_home_window(message_buy, signature_buy)   
 
 
 
@@ -585,19 +611,9 @@ class App(tk.Frame):
         btn1.place(relx=0.65, rely=0.5)
         btn2 = Button(self.root, text = "< BACK", fg = "red", command=self.main)
         btn2.place(relx=0.1, rely=0.1)
-    
-    def __register_success(self):
 
-        os.remove(str(Path.cwd()) + "/assets/images/qr_temp.png")
-        # Confirmación de registro correcto
-
-        # -------------------- FRIMA DIGITAL DEL SITEMA ------------------
-        message = "Register Completed Successfully"
-        signature = self.cripto.signing_with_private_key_RSA(message)
-        self.__open_home_window(message, signature)
 
     def __sign_in(self):
-
         # Botón de sing up
         btn = Button(self.root, text = "Sign in", fg = "green", command=self.__sign_in_clicked)   
         btn.place(relx=0.55, rely=0.5)

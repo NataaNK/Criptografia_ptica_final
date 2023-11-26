@@ -5,6 +5,7 @@ from cryptography.hazmat.primitives import hashes
 import cryptography.exceptions
 from pathlib import Path
 import base64
+
 # GLOBAL VARIABLES
 KEY_PEM_PATH = str(Path.cwd()) + "/data/key.pem"
 
@@ -60,14 +61,15 @@ class RSA:
                         )
             )    
 
-        print("\nMENSAJE DE DEPURACIÓN DEL CIFRADO: Encriptado con la clave pública (tamaño=2048) del servidor usando RSA\n", str(ciphertext)+"\n")
+        print("\nMENSAJE DE DEPURACIÓN: Encriptado con la clave pública (tamaño=2048) del servidor usando RSA\n", str(ciphertext)+"\n")
         return base64.b64encode(ciphertext)       
     
+
     def verify_signature_RSA_with_public_key(self, signature: bytes, message: str) -> bool:
 
         try:
             self.public_key.verify(
-            base64.b64decode(signature + b'=='),
+            signature,
             bytes(message, 'ascii'),
             padding.PSS(
                 mgf=padding.MGF1(hashes.SHA256()),
@@ -77,4 +79,6 @@ class RSA:
             )
         except cryptography.exceptions.InvalidSignature:
             return False
+        
+        print("\nMENSAJE DE DEPURACIÓN: Verificación de la firma digitan con RSA usando la clave pública\n", "True\n")
         return True
