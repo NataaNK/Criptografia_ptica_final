@@ -21,6 +21,14 @@ class RSA:
                                         key_size=2048,
                                         )   
         self.private_key_serialization(private_key)
+
+    def generate_private_key_usr(self):
+        private_key = rsa.generate_private_key(
+                                        public_exponent=65537,
+                                        key_size=2048,
+                                        )   
+        self.private_key_serialization_usr(private_key)
+
         
     def private_key_serialization(self, private_key):
         # Guardamos la clave privada encriptada en el disco con una contraseña
@@ -35,6 +43,19 @@ class RSA:
 
         self.public_key_serialization(private_key)
         self.private_key_storage(private_pem)
+
+    def private_key_serialization_usr(self, private_key):
+        # Guardamos la clave privada encriptada en el disco con una contraseña
+
+        private_pem = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption()
+                )
+        private_pem.splitlines()[0]
+        b'-----BEGIN ENCRYPTED PRIVATE KEY-----'
+        print("privatepemusr: ", private_pem)
+        return private_pem
 
     def public_key_serialization(self, private_key):
         # Atributo visible para todo el mundo: CLAVE PÚBLICA

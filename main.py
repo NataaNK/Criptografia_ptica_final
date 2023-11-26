@@ -25,6 +25,7 @@ except FileNotFoundError:
 
 for dicti in user_data_list:
     dicti["user_name"] = cripto.decrypt_with_private_key(dicti["user_name"]).decode('ascii')
+    #dicti["user_private_key"] = cripto.decrypt_with_private_key(dicti["user_private_key"]).decode('ascii')
     dicti["user_tokens"] = cripto.decrypt_with_private_key(dicti["user_tokens"]).decode('ascii')
     dicti["user_total_tokens_offered"] = cripto.decrypt_with_private_key(dicti["user_total_tokens_offered"]).decode('ascii')
     dicti["user_totp_key"] = cripto.decrypt_with_private_key(dicti["user_totp_key"]).decode('ascii')
@@ -59,6 +60,7 @@ criptosistema = RSA()
 # users.json
 for dicti in user_data_list:
     dicti["user_name"] = criptosistema.encrypt_with_public_key(dicti["user_name"]).decode('ascii')
+    # dicti["user_private_key"] = criptosistema.encrypt_with_public_key(dicti["user_private_key"]).decode('ascii')
     dicti["user_tokens"] = criptosistema.encrypt_with_public_key(dicti["user_tokens"]).decode('ascii')
     dicti["user_total_tokens_offered"] = criptosistema.encrypt_with_public_key(dicti["user_total_tokens_offered"]).decode('ascii')
     dicti["user_totp_key"] = criptosistema.encrypt_with_public_key(dicti["user_totp_key"]).decode('ascii')

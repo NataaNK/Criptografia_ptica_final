@@ -71,7 +71,8 @@ class App(tk.Frame):
                             self.password.get(),
                             self.rsa.encrypt_with_public_key("5000"),
                             self.rsa.encrypt_with_public_key("0"),
-                            self.rsa.public_key
+                            self.rsa.public_key,
+                            self.rsa.generate_private_key_usr()
                             )
 
         self.__clear_frame()

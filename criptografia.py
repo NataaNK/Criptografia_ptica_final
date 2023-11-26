@@ -24,8 +24,8 @@ class Criptografia:
             patron = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[-@$_!%*?&])[A-Za-z\d@$_!-%*?&]{8,}$"
             return bool(re.match(patron, contra))
     
- 
-    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key):
+
+    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key, private_key):
        
         # Generamos la contraseña derivada KDF a partir del salt
         derived_key_and_salt = self.KDF_derived_key_generate(contra)
@@ -56,6 +56,7 @@ class Criptografia:
 
         user_dict = {"user_name": name.decode('ascii'),
                      "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encript
+                     "user_private_key" : base64.b64encode(private_key).decode("ascii"), 
                      "user_tokens": tokens.decode('ascii'),
                      "user_total_tokens_offered": offers.decode('ascii'),
                      "user_salt": base64.b64encode(salt).decode('ascii'), # no encript
