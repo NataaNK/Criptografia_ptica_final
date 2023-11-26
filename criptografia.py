@@ -13,7 +13,8 @@ import qrcode
 
 # GLOBAL VARIABLES  
 USERS_JSON_FILE_PATH =  str(Path.cwd()) + "/data/users.json"
-KEY_PEM_PATH = str(Path.cwd()) + "/data/key.pem"
+KEY_PEM_PATH = str(Path.cwd()) + "/data/clave servidor/key.pem"
+
 
 class Criptografia:
     def __init__(self):
@@ -25,7 +26,7 @@ class Criptografia:
             return bool(re.match(patron, contra))
     
 
-    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key, private_key):
+    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key_server, public_key_usr):
        
         # Generamos la contraseña derivada KDF a partir del salt
         derived_key_and_salt = self.KDF_derived_key_generate(contra)
@@ -34,7 +35,7 @@ class Criptografia:
 
         # Generamos el QR de la autenticación en dos pasos y guardamos la 
         # key encriptada para futuras comprobaciones
-        totp_key = public_key.encrypt(
+        totp_key = public_key_server.encrypt(
                 bytes(self.TOKEN_code_authenticator_qr(name), 'ascii'),
                 padding.OAEP(
                             mgf=padding.MGF1(algorithm=hashes.SHA256()),
@@ -45,7 +46,7 @@ class Criptografia:
         
         # Generamos la etiqueta de autenticación del usuario y la guardamos
         # encriptada
-        hmac_key = public_key.encrypt(
+        hmac_key = public_key_server.encrypt(
                 base64.b64encode(self.HMAC_hash_signature_generate()),
                 padding.OAEP(
                             mgf=padding.MGF1(algorithm=hashes.SHA256()),
@@ -56,7 +57,7 @@ class Criptografia:
 
         user_dict = {"user_name": name.decode('ascii'),
                      "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encript
-                     "user_private_key" : base64.b64encode(private_key).decode("ascii"), 
+                     "user_public_key" : base64.b64encode(public_key_usr).decode('ascii'), # no encript
                      "user_tokens": tokens.decode('ascii'),
                      "user_total_tokens_offered": offers.decode('ascii'),
                      "user_salt": base64.b64encode(salt).decode('ascii'), # no encript
@@ -97,7 +98,7 @@ class Criptografia:
         k = pyotp.random_base32()
 
         # Crear un OTP basado en tiempo (TOTP). Un OTP es un código de un solo uso que se genera cada 30 segundos.
-        totp_auth = pyotp.totp.TOTP(k).provisioning_uri(name=self.decrypt_with_private_key(user_name), issuer_name=' Tokens Market')
+        totp_auth = pyotp.totp.TOTP(k).provisioning_uri(name=self.decrypt_with_private_key(user_name, KEY_PEM_PATH), issuer_name=' Tokens Market')
 
         # Generar un código QR
         qrcode.make(totp_auth).save(str(Path.cwd()) + "/assets/images/qr_temp.png")
@@ -118,7 +119,7 @@ class Criptografia:
         # Comprobamos que existe el usuario
         self.n_dict = 0
         for dicti in self.user_data_list:
-            if(name == self.decrypt_with_private_key(dicti["user_name"]).decode('ascii')):
+            if(name == self.decrypt_with_private_key(dicti["user_name"], KEY_PEM_PATH).decode('ascii')):
                 return True
             self.n_dict += 1
         return False
@@ -152,7 +153,7 @@ class Criptografia:
     def TOKEN_verify_code(self, input_key: str) -> bool:
             
         # Comprobamos que el código introducido coincide con el generado automáticamente
-        totp_del_servidor = pyotp.totp.TOTP(self.decrypt_with_private_key(self.user_data_list[self.n_dict]["user_totp_key"]).decode('ascii'))
+        totp_del_servidor = pyotp.totp.TOTP(self.decrypt_with_private_key(self.user_data_list[self.n_dict]["user_totp_key"], KEY_PEM_PATH).decode('ascii'))
         totp_auth = totp_del_servidor.now()
         totp_submited = input_key
         
@@ -161,8 +162,8 @@ class Criptografia:
         return True
             
 
-    def private_key_load(self):
-        with open(KEY_PEM_PATH, "rb") as key_file:
+    def private_key_load(self, path):
+        with open(path, "rb") as key_file:
             private_key = serialization.load_pem_private_key(
             key_file.read(),
             password=b'zBm2754:3Fl2K:XV',
@@ -170,8 +171,8 @@ class Criptografia:
         return private_key
     
     
-    def decrypt_with_private_key(self, ciphertext: bytes):
-        private_key = self.private_key_load()
+    def decrypt_with_private_key(self, ciphertext: bytes, path):
+        private_key = self.private_key_load(path)
 
         plaintext = private_key.decrypt(
             base64.b64decode(ciphertext),
@@ -183,7 +184,6 @@ class Criptografia:
         )
     
         return plaintext
-    
 
     def HMAC_hash_signature_generate(self):
         key_hmac = os.urandom(32) # 32 bytes = 256 bits para SHA256
@@ -211,8 +211,8 @@ class Criptografia:
         return True
 
 
-    def signing_with_private_key_RSA(self, message: str):
-        private_key = self.private_key_load()
+    def signing_with_private_key_RSA(self, message: str, path):
+        private_key = self.private_key_load(path)
 
         signature = private_key.sign(
             bytes(message, 'ascii'),

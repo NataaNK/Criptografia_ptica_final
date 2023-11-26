@@ -1,20 +1,13 @@
 [
   {
-    "user_seller": "erc9aUNxI4OOMFs4aKMZm7l4Ynp+wfUU9c8VjMGeuO/rh367cWekSfIehnVGUZlrDrvA/pVwmLh41mED9WBl39lj9HKBrU3qHvaXHZzzd0BSTqYgrDjW/92nxLNarFIFD79VTooE5oAQycLu3+/0LSwavnq/5PeB19wxcOGTvLnaOiHY8JNp/mIwrA4wjZRYTSCRPRCCnzlSoWdF/RBa+lgT8EWTXo01UM0yv0gas/zn81cEKSwUCqYHoLsjArAzjqXIxUvTwZ49sTvAs/mai4ZeUShjs/mI/jpoFdUz8gP5OnGPpbqZk3o4gQef2IMNKp/MpzMFzadcc9z5jISZBg==",
-    "tokens_offered": 111,
-    "price_offered": 111,
+    "user_seller": "Zu5BxJil2rJgfdXEQ3xlgi1WarjYevWoqj8ddF2fKb5l2IGf4mYqYsaD9Lja+/Bc5/JcSuMqss6TFmWYL0Ca9Aph5HBlTjIthyPIHDqqzCodGI8A+/9IlQKPZ9IGwuPTJQh0Fwrg1TZFNpj7z6IOE2BuLd6IcexkOycJPBLzWu9Np1P6taXwOkv1a4bKA/lt5YoZsavUze2ihjCZQvmm1dMCRM8nMEQp4pe/pDw8rJUtBJ5um0twIPTfYR5DME0m8qFTMYsXoknU7w+TJu63PD115R8H5eoD6SZymEYwRopm2hVuRHqE4CD/EVKmykoQh9jp95qLDwSHIJEp+8Z4TA==",
+    "tokens_offered": 333,
+    "price_offered": 333,
     "accepted_offer": [
-      "Your offer of 222tokens for the price of 111euros has been accepted",
-      "KXzRioQHPP+BIULgrh/tQPax8JouEO6ExvQ890/Sq9mAFkg/bs4FiRk5BioHaL3ua8HS/T/eXrO7fm7P4IjAFxrfGkALlI6l3CKMdyMm+Dk+0QHdWyWD0TQVu3DZJg7ybA126lVehlaFpmuvSblkdCjtdxm11dave8DQv9LuACKZBSooKajXL2to/Hz9YcheAH1N3Cs/0VZz37DwAx1Kko/quNKF9ZEy2AGl66CvFikM7WDD0Tp67H+bUvN9DfBOMbNFbFk6C01e4kVj08C58DbfNUrJlERlE9tpoiK4V3o6giIwpEvMbKMmgEVE6/pR6S/mTK6oMwH6pLLdnUqkRw=="
-    ]
-  },
-  {
-    "user_seller": "iDdPJ6iHFvKMDsRLOpf3hol7jVd+vDtEt1UQ3gcgRdSTyd9QhPtrnsU2Kwzt9WbRuvYKOBODRDxrKGMkqWqCU6Ar/QXdb4bbwAgA73UjPh3PEsMjrRu7ikSyRRqJynBvTJ7P3sVpnlsYkIM4mPyz0I96WDt25c5fM3qoDruwNKGrlK6bppK1rcNuZDQhaNP6LQUAsJziRfFEgEz7VpUXyplvYbgFwBQqZ78fUsrG9qfdtdF6XUlL8c39Xp4Ken3q8/WjTKegdOTL+DMLaKYVsWCruMW7bt60bUzy8gQVEnTupzwiQrfsh8w4iJ7CJ1edcfHLpabdA9ZNO3b03MXzHQ==",
-    "tokens_offered": 222,
-    "price_offered": 111,
-    "accepted_offer": [
-      false,
-      false
+      "nbISlRmOgc2m1eO7deV3DXyA+soVj0CBvxyooM20KBZcVkKXcUcEInAKO83DD4vjAS4DSHKCezrFUrFisr8SbeoYumRaa3rZzdGZBQfvQUjPABcrGMQJMaJNmxWXXUJCHrxc9M9JcblRA6rIT93Gxc1SduOy+ktNAt6nZqBbGe86znleKKkNeXu6W+XqIPyeg3TDn+N7vQUQsB66AWZUfakCqaUas1pZdvQd3LezG/xW7MoFMhYS4eOH1ZcHwltsQ8SjO86c7N4X7BQQtLQHxBslZehxnWgAPAdtjOjZeh9UiuubbZWi2NyjekjPZiETP2XnSaE+n1LA4b/EWeF4Yw==",
+      "QLmoK4+rChzPOSivEK3nn7egtpY0ZOLA4kQjeisuviqz+UjMqVZopTYRshxR/l092YC40VNDLWJBhAwNsvHr/4OeGEwrXskGE+E3R3StUDeLX0cjYudsuGhpWKriq9SSZLvJHp+nNakTnX49i2x9TGN6oCAjg7oKYm8t5mMYCPABo5nmWYg4L3Wzo2HEZ75B0ZhZW57h42GV3TtNPibqLk6x7VhlJ/6j/apm/8zbAEQLmfhHdGDG7CP5p1Qoi1l85Vq3F9kihERssXeJr7/xRblq72pV07JaJmsRgraGAIZ/GM+4XHLnGdmkqEwF24UD0J+YCoO0kgoATge8ZFuQdA==",
+      "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAox69trzqjhsnIh8k/qzM\nGmJJMle21j+pWkERYkTuJfW3EPW8NKGfoBYa5lBON7LY82J26La7kipVJtfCtVNb\nbJPuWQoPHud0gTlxvjBAnvYNXKAmrF/dy4Qohw2c/8nnajdlcamQZ7U8NyuB13pg\nMX6fpte6Or6FlqmE2a/fijHHJ5GJluEVU9FF0n2nEMufLiwpPTNUprB2rCVDz5wb\nSEVETHLlhlhz8ig6Vj7uxmt3tUCcZppSZzjOtBk92dV8SIQhMh0tDw2NTM6+yuIT\nUXcLxcqRcZAlYo0zEBsAuxBltHLw+3Z4iaq2RZeE+FDVGz+aAdjeWtuvgl1DdCxc\nZwIDAQAB\n-----END PUBLIC KEY-----\n",
+      "uzE224mTfmNqI2yGmpf+erwj4CObYnh6UFi4n8AdQnE="
     ]
   }
 ]
