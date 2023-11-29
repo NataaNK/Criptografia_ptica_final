@@ -8,6 +8,7 @@ import os
 import time
 import base64
 from criptografia import Criptografia
+from cryptography.hazmat.primitives import serialization
 from rsa import rsa
 
 
@@ -65,8 +66,7 @@ class App(tk.Frame):
             self.__sign_up_clicked()
             return
         
-        # ---------------- ALMACENAMIENTO DE CONTRASEÑAS CON KDC Y SALT ----------------
-        usr_public_key = self.rsa.generate_private_key_usr(self.cripto.n_dict)
+        usr_public_pem = self.rsa.generate_private_key_usr(self.cripto.n_dict)
         
         # Guardamos la clave derivada haciendo uso de KDF y los datos encriptados con RSA
         self.cripto.data_storage(
@@ -75,7 +75,7 @@ class App(tk.Frame):
                             self.rsa.encrypt_with_public_key_server("5000"),
                             self.rsa.encrypt_with_public_key_server("0"),
                             self.rsa.public_key_server, 
-                            usr_public_key
+                            usr_public_pem
                             )
 
         self.__clear_frame()
@@ -103,16 +103,14 @@ class App(tk.Frame):
             # Confirmación de registro correcto
             # -------------------- FIRMA DIGITAL DEL SITEMA -------------------
             message = "Register Completed Successfully"
-            # Hash del mensaje
-            hash_key = self.cripto.HMAC_hash_signature_generate()
-            hash_msg = self.cripto.HMAC_label_authentication_generate(message, hash_key)
             # Firma del hash
-            signature = self.cripto.signing_with_private_key_RSA(base64.b64encode(hash_msg).decode("ascii"), KEY_PEM_PATH)
-            # Encriptamos el mensaje
-            public_pem_usr = base64.b64decode(self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"])
-            encrypt_message = self.rsa.encrypt_with_public_key_usr(message, public_pem_usr)
-            self.__open_home_window(encrypt_message, signature, hash_key)
+            signature = self.cripto.signing_with_private_key_RSA(message, KEY_PEM_PATH)
+            # Encriptamos mensaje
+            encrypted_message = self.rsa.encrypt_with_public_key_usr(message, self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii'))
+            self.__open_home_window(encrypted_message, signature)
         
+
+
     # ------------------------------------- AUTENTICACIÓN -------------------------------------
 
     def __sign_in_authentication_1(self):
@@ -188,6 +186,8 @@ class App(tk.Frame):
         self.__open_home_window()
 
 
+
+
     # --------------------- PREVISIÓN DE ATAQUES A FUERZA BRUTA ----------------------
 
     def maximum_attempts(self, counter: int, type: str):
@@ -202,8 +202,8 @@ class App(tk.Frame):
 
         n_block_dict = 0
         for dicti in user_blocked_list:
-            if self.cripto.decrypt_with_private_key(dicti["user_name"], KEY_PEM_PATH).decode('ascii') == \
-            self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH).decode('ascii'):
+            if self.cripto.decrypt_with_private_key(dicti["user_name"], KEY_PEM_PATH) == \
+            self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH):
                 if (time.time()-float(dicti["blocked_time"]) > BLOCKED_TIME): 
                     del user_blocked_list[n_block_dict]
                     with open(BLOCKED_USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
@@ -252,10 +252,10 @@ class App(tk.Frame):
   
         return ret
 
+
+
     
     # ---------------------- HACER OFERTAS y GUARDARLAS ----------------------------
-
-    # ---------------------- GENERAR ETIQUETA DE AUTENTICACIÓN - VENDEDOR ---------------------
 
     def __confirm_offer(self):
         # Obtenemos los valores del entry
@@ -266,8 +266,10 @@ class App(tk.Frame):
             messagebox.showerror("Offer Error", "Incorrect value, must be an integer")
             self.__make_offer_clicked()
             return
-        user_tokens = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], KEY_PEM_PATH).decode('ascii'))
-        user_total_tokens_offered = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"], KEY_PEM_PATH).decode('ascii'))
+        user_tokens = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], 
+                                                               KEY_PEM_PATH))
+        user_total_tokens_offered = int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"], 
+                                                                             KEY_PEM_PATH))
         user_total_tokens_offered += self.offer_tokens
         
 
@@ -283,7 +285,8 @@ class App(tk.Frame):
             return
         else:
 
-            self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"] = self.rsa.encrypt_with_public_key_server(str(user_total_tokens_offered)).decode('ascii')
+            self.cripto.user_data_list[self.cripto.n_dict]["user_total_tokens_offered"] = \
+            self.rsa.encrypt_with_public_key_server(str(user_total_tokens_offered))
 
             try:
                 with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
@@ -296,29 +299,33 @@ class App(tk.Frame):
             with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
                 json.dump(data_list, file, indent=2)
 
+
+            # ----------------------- FIRMA DIGITAL DEL USUARIO: OFERTANTE--------------------
+
             # Generamos el hash hmac mediante el mesaje (oferta) que será:
-            # user_name, tokens_offered, price_offered
-            oferta = str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + \
+            # user_name, tokens_offered, price_offered -> YA LO HACE LA FUNCIÓN DE FIRMA
+            oferta = str(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH)) + \
                      str(self.offer_tokens) + str(self.offer_price)
-            hmac = self.cripto.HMAC_label_authentication_generate(oferta, 
-                        self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"], KEY_PEM_PATH))
+            signature = self.cripto.signing_with_private_key_RSA(oferta, KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem")
+            # Encriptamos la oferta
+            oferta_encrypted = self.rsa.encrypt_with_public_key_server(oferta)
 
-            self.__publish_offer(hmac)
+            self.__publish_offer(signature, oferta_encrypted)
 
-    # ------------------ COMPROBAR ETIQUETAS DE AUTENTICACIÓN - VENDEDOR -----------------------------------
+    
 
-    def __publish_offer(self, hmac):
+    def __publish_offer(self, signature, oferta_encrypted):
 
+        # --------------------------- COMPROBAR FIRMA DIGITAL Y HASH DEL OFERTANTE -----------------------------------
         # Antes de publicar la oferta comprobamos su autenticidad e integridad
-        # mediante la verificación del HASH HMAC
-        if(not self.cripto.HMAC_label_authentication_verify(
-                str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + str(self.offer_tokens) + str(self.offer_price), 
-                hmac,
-                self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"], KEY_PEM_PATH))):
-            
+        # mediante la verificación del hash, al igual que autenticar con la firma
+        public_key_usr = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"]
+        oferta = self.cripto.decrypt_with_private_key(oferta_encrypted, KEY_PEM_PATH)
+        if not self.rsa.verify_signature_RSA_with_public_key(signature, oferta, public_key_usr.encode('ascii')):
             messagebox.showerror("Offer Error", "The data provided may have been corrupted, please try again")
             self.__make_offer_clicked()
             return
+
 
         # Guardamos la oferta en el json con su hmac
         try:
@@ -337,38 +344,120 @@ class App(tk.Frame):
 
         # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
         message = "Offer Published Successfully"
-        # Hash del mensaje
-        hash_key = self.cripto.HMAC_hash_signature_generate()
-        hash_msg = self.cripto.HMAC_label_authentication_generate(message, hash_key)
         # Firma del hash
-        signature = self.cripto.signing_with_private_key_RSA(base64.b64encode(hash_msg).decode("ascii"), KEY_PEM_PATH)
+        signature = self.cripto.signing_with_private_key_RSA(message, KEY_PEM_PATH)
         # Encriptamos el mensaje
-        public_pem_usr = base64.b64decode(self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"])
-        encrypt_message = self.rsa.encrypt_with_public_key_usr(message, public_pem_usr)
-        self.__open_home_window(encrypt_message, signature, hash_key)
+        encrypted_message = self.rsa.encrypt_with_public_key_usr(message, self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii'))
+        self.__open_home_window(encrypted_message, signature)
+
+
+     
+    def __accept_offer(self, index: int, tokens_offered, price_offered, signature, compra_encrypted):
+
+        # ------------------ COMPROBAR FIRMA DIGITAL Y HASH DEL COMPRADOR ---------------
+
+        # Comprobamos que la información no se ha corrompido y autenticamos
+        # su origen, comprobando el hash y firma
+        public_key_usr = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"]
+        compra = self.cripto.decrypt_with_private_key(compra_encrypted, KEY_PEM_PATH)
+        if not self.rsa.verify_signature_RSA_with_public_key(signature, compra, public_key_usr.encode('ascii')):
+            messagebox.showerror("Purchase Error", "The request to accept an offer may have been corrupted, please try again")
+            self.__open_home_window()
+            return
+        
+        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
+        message_buy = "Purchase Completed Successfully"
+        # Firmamos el hash
+        signature_buy = self.cripto.signing_with_private_key_RSA(message_buy, KEY_PEM_PATH)
+        # Encriptamos el mensaje
+        encrypted_message_buy = self.rsa.encrypt_with_public_key_usr(message_buy, 
+                               self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii'))
+        
+        # Le sumamos los tokens al comprador
+        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
+        self.rsa.encrypt_with_public_key_server(str(int(self.cripto.decrypt_with_private_key(
+                                                self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"],
+                                                KEY_PEM_PATH)) + int(tokens_offered)))
+
+
+        # Lo actualizamos en la base de datos
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+ 
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
+
+        try:
+            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                offers_list = json.load(file)
+        except FileNotFoundError:
+            offers_list = []
+
+        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
+        # Mediante index, podemos obtener el diccionario de la oferta
+        # y marcarla como aceptada
+        message_sell = str("Your offer of " + tokens_offered + "tokens for the price of " + price_offered + \
+                    "euros has been accepted")
+        # Firma del hash
+        signature_sell = self.cripto.signing_with_private_key_RSA(message_sell, KEY_PEM_PATH)
+        self.offer_list[index]["accepted_offer"] = [message_sell, base64.b64encode(signature_sell).decode('ascii'), 
+                                                    self.rsa.public_pem_server.decode('ascii')]
+
+
+        del offers_list[index]
+        offers_list.insert(index, self.offer_list[index])
+        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(offers_list, file, indent=2)
+
+        self.__open_home_window(encrypted_message_buy, signature_buy)   
+
+
+
+    def __sell_offer(self, tokens_offered):
+        # Restamos los tokens vendidos
+        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
+        self.rsa.encrypt_with_public_key_server(str(int(self.cripto.decrypt_with_private_key(
+                                                    self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], 
+                                                    KEY_PEM_PATH))-int(tokens_offered)))
+        
+        # Lo actualizamos en la base de datos
+        try:
+            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                user_data_list = json.load(file)
+        except FileNotFoundError:
+            user_data_list = []
+
+        del user_data_list[self.cripto.n_dict]
+        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(user_data_list, file, indent=2)
+
+        self.__open_home_window()  
 
 
 
     # ------------------ HOME WINDOW: BOTONES DE COMPRAR Y OFERTAR TOKENS ------------------
 
-    def __open_home_window(self, message = None, signature = None, hash_key = None): 
+    def __open_home_window(self, encrypted_message = None, signature = None): 
 
         # ----------------- VERIFICACIÓN FIRMA DIGITAL DEL SISTEMA ---------------------------
-        if message and signature:
-            # Desencriptamos el mensaje
-            decrypted_message = self.cripto.decrypt_with_private_key(message, KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem").decode("ascii")
-            # Hacemos hash del mensaje
-            hash_msg = self.cripto.HMAC_label_authentication_generate(decrypted_message, hash_key)
+        if encrypted_message and signature:
+            message = self.cripto.decrypt_with_private_key(encrypted_message, KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem")
             # El usuario comprueba la integridad, autenticación y no repudio
             # del mensaje del sistema comprobando su firma digital
-            if not self.rsa.verify_server_signature_RSA_with_public_key(signature, bytes(base64.b64encode(hash_msg).decode("ascii"), 'ascii'), self.rsa.public_pem_server):
+            if not self.rsa.verify_signature_RSA_with_public_key(signature, message, self.rsa.public_pem_server):
                 messagebox.showerror("Corrupt Information", "We are having some security problems")
                 # Cerramos la aplicación para evitar un ataque
                 self.root.destroy()
                 return
 
             # Mostramos el mensaje una vez confirmado
-            messagebox.showinfo("Information", decrypted_message)
+            messagebox.showinfo("Information", message)
 
         # Abrimos pestaña de inicio
         self.__clear_frame()
@@ -426,25 +515,21 @@ class App(tk.Frame):
         d = 0
         for dicti in self.offer_list:
             if (dicti["accepted_offer"][0]) and \
-            (self.cripto.decrypt_with_private_key(dicti["user_seller"], KEY_PEM_PATH).decode('ascii') == \
-             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH).decode('ascii')):
+            (self.cripto.decrypt_with_private_key(dicti["user_seller"], KEY_PEM_PATH) == \
+             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH)):
 
                 # ----------------- VERIFICACIÓN FIRMA DIGITAL DEL SISTEMA ---------------------------
-                # Desencriptamos el mensaje
-                decrypted_message = self.cripto.decrypt_with_private_key(dicti["accepted_offer"][0], KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem").decode("ascii")
-                # Generamos el hash
-                hash_msg = self.cripto.HMAC_label_authentication_generate(decrypted_message, base64.b64decode(dicti["accepted_offer"][3]))
                 # El usuario comprueba la integridad, autenticación y no repudio
                 # del mensaje del sistema comprobando su firma digital
-                if not self.rsa.verify_server_signature_RSA_with_public_key(base64.b64decode(dicti["accepted_offer"][1]), 
-                                                bytes(base64.b64encode(hash_msg).decode("ascii"), 'ascii'), dicti["accepted_offer"][2].encode('ascii')):
+                if not self.rsa.verify_signature_RSA_with_public_key(base64.b64decode(dicti["accepted_offer"][1]), 
+                                                dicti["accepted_offer"][0], dicti["accepted_offer"][2].encode('ascii')):
                     messagebox.showerror("Corrupt Information", "We are having some security problems")
                     # Cerramos la aplicación para evitar un ataques
                     self.root.destroy()
                     return
 
                 # Mostramos mensaje de oferta aceptada
-                messagebox.showinfo("Sale Information", decrypted_message)
+                messagebox.showinfo("Sale Information",  dicti["accepted_offer"][0])
 
                 # Eliminamos la oferta de la base de datos
                 del self.offer_list[d]
@@ -454,8 +539,8 @@ class App(tk.Frame):
                 self.__sell_offer(dicti["tokens_offered"])
                 return
             
-            elif (not dicti["accepted_offer"][0]) and ((self.cripto.decrypt_with_private_key(dicti["user_seller"], KEY_PEM_PATH).decode('ascii') == \
-             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH).decode('ascii'))):
+            elif (not dicti["accepted_offer"][0]) and ((self.cripto.decrypt_with_private_key(dicti["user_seller"], KEY_PEM_PATH) == \
+             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH))):
                 # Si la ofereta está disponible y es mía, la muestro indicando que es mía
                 tree.insert("",END, values=("¡MINE! "+ str(dicti["tokens_offered"]), dicti["price_offered"]))
                 
@@ -491,128 +576,29 @@ class App(tk.Frame):
                 self.__open_home_window()
                 return
             
-             # ------------------ GENERAR ETIQUETAS DE AUTENTICACIÓN - COMPRADOR -----------------------------------
-
+            # ----------------------- FIRMA DIGITAL Y HASH DEL USUARIO: COMPRADOR--------------------
             if selected_item:
                 index = int(tree.index(selected_item))
                 tokens_offered = tree.item(selected_item, "values")[0]
                 price_offered = tree.item(selected_item, "values")[1]
-                # Generamos el hash siganture HMAC siendo el mensaje la oferta 
+                # Generamos el hash y firma siendo el mensaje la oferta 
                 # a aceptar y el usuario comprador: user_name, tokens, price
-                compra = str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) +\
+                compra = str(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH)) +\
                          str(tokens_offered) + str(price_offered)
-                hmac = self.cripto.HMAC_label_authentication_generate(compra,
-                            self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"], KEY_PEM_PATH))
-                self.__accept_offer(index, tokens_offered, price_offered, hmac)
+                signature = self.cripto.signing_with_private_key_RSA(compra, KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem")
+                # Encriptamos el mensaje
+                compra_encrypted = self.rsa.encrypt_with_public_key_server(compra)
+                self.__accept_offer(index, tokens_offered, price_offered, signature, compra_encrypted)
                 return
 
         # Asocia la función offer_clicked al evento de clic en el Treeview
         tree.bind("<ButtonRelease-1>", offer_clicked)
         
 
-    # ------------------ COMPROBAR ETIQUETA DE AUTENTICACIÓN - COMPRADOR ---------------
-
-    # Define la función que se llamará cuando se haga clic en una oferta
-    def __accept_offer(self, index: int, tokens_offered, price_offered, hmac):
-
-        # Comprobamos que la información no se ha corrompido y autenticamos
-        # su origen, comprobando el hash HMAC (hmac)
-        if(not self.cripto.HMAC_label_authentication_verify(
-                str(self.cripto.user_data_list[self.cripto.n_dict]["user_name"]) + str(tokens_offered) + str(price_offered), 
-                hmac,
-                self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_hmac_key"], KEY_PEM_PATH))):
-            
-            messagebox.showerror("Purchase Error", "The request to accept an offer may have been corrupted, please try again")
-            self.__make_offer_clicked()
-            return
-        
-        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
-        message_buy = "Purchase Completed Successfully"
-        # Hash del mensaje
-        hash_key_buy = self.cripto.HMAC_hash_signature_generate()
-        hash_msg_buy = self.cripto.HMAC_label_authentication_generate(message_buy, hash_key_buy)
-        # Firma del hash
-        signature_buy = self.cripto.signing_with_private_key_RSA(base64.b64encode(hash_msg_buy).decode("ascii"), KEY_PEM_PATH)
-        # Encriptamos el mensaje
-        public_pem_usr_buy = base64.b64decode(self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"])
-        encrypt_message_buy = self.rsa.encrypt_with_public_key_usr(message_buy, public_pem_usr_buy)
-        
-        # Le sumamos los tokens al comprador
-        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
-        self.rsa.encrypt_with_public_key_server(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], KEY_PEM_PATH).decode('ascii'))+\
-                                         int(tokens_offered))).decode('ascii')
-
-
-        # Lo actualizamos en la base de datos
-        try:
-            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                user_data_list = json.load(file)
-        except FileNotFoundError:
-            user_data_list = []
- 
-        del user_data_list[self.cripto.n_dict]
-        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
-        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(user_data_list, file, indent=2)
-
-        try:
-            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                offers_list = json.load(file)
-        except FileNotFoundError:
-            offers_list = []
-
-        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
-        # Mediante index, podemos obtener el diccionario de la oferta
-        # y marcarla como aceptada
-        message_sell = str("Your offer of " + tokens_offered + "tokens for the price of " + price_offered + \
-                    "euros has been accepted")
-        # Hash del mensaje
-        hash_key = self.cripto.HMAC_hash_signature_generate()
-        hash_msg = self.cripto.HMAC_label_authentication_generate(message_sell, hash_key)
-        # Firma del hash
-        signature_sell = self.cripto.signing_with_private_key_RSA(base64.b64encode(hash_msg).decode("ascii"), KEY_PEM_PATH)
-        # Buscamos la clave pública del vendedor 
-        seller = offers_list[index]["user_seller"]
-        for dicti in user_data_list:
-            if(seller == dicti["user_name"]):
-                public_pem_usr = base64.b64decode(dicti["user_public_key"])
-        # Encriptamos el mensaje
-        encrypt_message_sell = self.rsa.encrypt_with_public_key_usr(message_sell, public_pem_usr)
-        self.offer_list[index]["accepted_offer"] = [encrypt_message_sell.decode('ascii'), base64.b64encode(signature_sell).decode('ascii'), 
-                                                    self.rsa.public_pem_server.decode('ascii'), base64.b64encode(hash_key).decode('ascii')]
-
-
-        del offers_list[index]
-        offers_list.insert(index, self.offer_list[index])
-        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(offers_list, file, indent=2)
-
-        self.__open_home_window(encrypt_message_buy, signature_buy, hash_key_buy)   
-
-
-
-    # Se llama cuando una de tus ofertas a sido aceptada
-    def __sell_offer(self, tokens_offered):
-        # Restamos los tokens vendidos
-        self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
-        self.rsa.encrypt_with_public_key_server(str(int(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], KEY_PEM_PATH).decode('ascii'))-\
-                                         int(tokens_offered))).decode('ascii')
-        
-        # Lo actualizamos en la base de datos
-        try:
-            with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
-                user_data_list = json.load(file)
-        except FileNotFoundError:
-            user_data_list = []
-
-        del user_data_list[self.cripto.n_dict]
-        user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
-        with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
-            json.dump(user_data_list, file, indent=2)
-
-        self.__open_home_window()  
 
         
+
+
     # ------------------------- INTERFAZ --------------------------------------------
 
     def main(self):
@@ -723,11 +709,11 @@ class App(tk.Frame):
         self.entry_tokens = Entry(self.root, textvariable=Var_text_tokens, 
                        width=20, fg="grey")
         self.entry_tokens.place(relx=0.5, rely=0.4)
-        self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], KEY_PEM_PATH).decode('ascii'))
+        self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], KEY_PEM_PATH))
         
         self.entry_tokens.bind("<FocusIn>", lambda event: self.entry_tokens.delete(0,"end")
-                    if Var_text_tokens.get() == "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], KEY_PEM_PATH).decode('ascii') else None)
-        self.entry_tokens.bind("<FocusOut>", lambda event: self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"],KEY_PEM_PATH).decode('ascii')) 
+                    if Var_text_tokens.get() == "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"], KEY_PEM_PATH) else None)
+        self.entry_tokens.bind("<FocusOut>", lambda event: self.entry_tokens.insert(0, "1 - " + self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"],KEY_PEM_PATH)) 
                     if Var_text_tokens.get() == "" else None)
         
         self.entry_priced = Entry(self.root, textvariable=Var_text_price,width=20,fg="grey")

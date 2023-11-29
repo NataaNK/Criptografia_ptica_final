@@ -1,1 +1,0 @@
-# Criptografia_ptica_final

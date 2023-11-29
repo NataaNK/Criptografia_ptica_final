@@ -3,6 +3,7 @@ import os
 import json
 import base64
 import time
+import datetime
 from pathlib import Path
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 import cryptography.exceptions
@@ -10,6 +11,9 @@ from cryptography.hazmat.primitives import serialization, hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import padding
 import pyotp
 import qrcode
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+
 
 # GLOBAL VARIABLES  
 USERS_JSON_FILE_PATH =  str(Path.cwd()) + "/data/users.json"
@@ -26,7 +30,7 @@ class Criptografia:
             return bool(re.match(patron, contra))
     
 
-    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key_server, public_key_usr):
+    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key_server, public_pem_usr):
        
         # Generamos la contraseña derivada KDF a partir del salt
         derived_key_and_salt = self.KDF_derived_key_generate(contra)
@@ -55,11 +59,11 @@ class Criptografia:
                             )
                 )
 
-        user_dict = {"user_name": name.decode('ascii'),
+        user_dict = {"user_name": name,
                      "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encript
-                     "user_public_key" : base64.b64encode(public_key_usr).decode('ascii'), # no encript
-                     "user_tokens": tokens.decode('ascii'),
-                     "user_total_tokens_offered": offers.decode('ascii'),
+                     "user_public_key" : public_pem_usr.decode('ascii'), # no encript
+                     "user_tokens": tokens,
+                     "user_total_tokens_offered": offers,
                      "user_salt": base64.b64encode(salt).decode('ascii'), # no encript
                      "user_totp_key": base64.b64encode(totp_key).decode('ascii'),
                      "user_hmac_key": base64.b64encode(hmac_key).decode('ascii'),
@@ -119,7 +123,7 @@ class Criptografia:
         # Comprobamos que existe el usuario
         self.n_dict = 0
         for dicti in self.user_data_list:
-            if(name == self.decrypt_with_private_key(dicti["user_name"], KEY_PEM_PATH).decode('ascii')):
+            if(name == self.decrypt_with_private_key(dicti["user_name"], KEY_PEM_PATH)):
                 return True
             self.n_dict += 1
         return False
@@ -153,7 +157,7 @@ class Criptografia:
     def TOKEN_verify_code(self, input_key: str) -> bool:
             
         # Comprobamos que el código introducido coincide con el generado automáticamente
-        totp_del_servidor = pyotp.totp.TOTP(self.decrypt_with_private_key(self.user_data_list[self.n_dict]["user_totp_key"], KEY_PEM_PATH).decode('ascii'))
+        totp_del_servidor = pyotp.totp.TOTP(self.decrypt_with_private_key(self.user_data_list[self.n_dict]["user_totp_key"], KEY_PEM_PATH))
         totp_auth = totp_del_servidor.now()
         totp_submited = input_key
         
@@ -183,7 +187,7 @@ class Criptografia:
             )
         )
     
-        return plaintext
+        return plaintext.decode('ascii')
 
     def HMAC_hash_signature_generate(self):
         key_hmac = os.urandom(32) # 32 bytes = 256 bits para SHA256
@@ -227,6 +231,32 @@ class Criptografia:
         return signature
     
 
-    
+    def certificate_validation(self, certificate: cryptography.x509.Certificate, 
+                               issuer_certificate: cryptography.x509.Certificate, 
+                               issuer_of_CRL_public_key: rsa.RSAPublicKey,
+                               CRL: cryptography.x509.CertificateRevocationList):
+        
+        # Si el certificado está caducado lo añadimos a la CRL
+        now = datetime.datetime.today()
+        if((now < certificate.not_valid_before) or (now > certificate.not_valid_after)):
 
-    
+            revoked_cert = cryptography.x509.RevokedCertificateBuilder().serial_number(
+                certificate.serial_number
+                ).revocation_date(
+                    datetime.datetime.today()
+                ).build()
+
+            CRL = CRL.add_revoked_certificate(revoked_cert)
+
+        # Comprobamos validez del certificado
+        CRL.is_signature_valid(issuer_of_CRL_public_key)
+        
+        # Comprobamos que el certificado ha sido emitido por el
+        # que dice ser y es correcto
+        try:
+            certificate.verify_directly_issued_by(issuer_certificate)
+        except cryptography.exceptions.InvalidSignature:
+            return False
+        return True
+
+

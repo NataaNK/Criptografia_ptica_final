@@ -98,7 +98,7 @@ class RSA:
     
 
     def encrypt_with_public_key_server(self, message: str):
-
+ 
         ciphertext = self.public_key_server.encrypt(
             bytes(message, 'ascii'),
             padding.OAEP(
@@ -109,7 +109,7 @@ class RSA:
             )    
 
         print("\nMENSAJE DE DEPURACIÓN: Encriptado con la clave pública del servidor (tamaño=2048) usando RSA\n", str(ciphertext)+"\n")
-        return base64.b64encode(ciphertext)       
+        return base64.b64encode(ciphertext).decode('ascii')      
 
     
     def encrypt_with_public_key_usr(self, message: str, public_pem_usr):
@@ -126,17 +126,17 @@ class RSA:
             )    
 
         print("\nMENSAJE DE DEPURACIÓN: Encriptado con la clave pública del usuario (tamaño=2048) usando RSA\n", str(ciphertext)+"\n")
-        return base64.b64encode(ciphertext)   
+        return base64.b64encode(ciphertext).decode('ascii')   
     
 
-    def verify_server_signature_RSA_with_public_key(self, signature: bytes, message: str, server_public_pem) -> bool:
+    def verify_signature_RSA_with_public_key(self, signature: bytes, message: str, public_pem) -> bool:
 
-        server_public_key = serialization.load_pem_public_key(server_public_pem)
+        public_key = serialization.load_pem_public_key(public_pem)
 
         try:
-            server_public_key.verify(
+            public_key.verify(
             signature,
-            message,
+            bytes(message, 'ascii'),
             padding.PSS(
                 mgf=padding.MGF1(hashes.SHA256()),
                 salt_length=padding.PSS.MAX_LENGTH
