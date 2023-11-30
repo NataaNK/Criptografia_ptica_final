@@ -9,6 +9,7 @@ import time
 import base64
 from criptografia import Criptografia
 from cryptography.hazmat.primitives import serialization
+from cryptography.x509 import load_pem_x509_certificate, ocsp
 from rsa import rsa
 
 
@@ -66,8 +67,10 @@ class App(tk.Frame):
             self.__sign_up_clicked()
             return
         
-        usr_public_pem = self.rsa.generate_private_key_usr(self.cripto.n_dict)
         
+        
+        usr_public_pem = self.rsa.generate_private_key_usr(self.cripto.n_dict)
+        usr_certificate = self.rsa.user_pem_certificate
         # Guardamos la clave derivada haciendo uso de KDF y los datos encriptados con RSA
         self.cripto.data_storage(
                             self.rsa.encrypt_with_public_key_server(self.username.get()),
@@ -75,7 +78,8 @@ class App(tk.Frame):
                             self.rsa.encrypt_with_public_key_server("5000"),
                             self.rsa.encrypt_with_public_key_server("0"),
                             self.rsa.public_key_server, 
-                            usr_public_pem
+                            usr_public_pem,
+                            usr_certificate
                             )
 
         self.__clear_frame()
@@ -105,8 +109,30 @@ class App(tk.Frame):
             message = "Register Completed Successfully"
             # Firma del hash
             signature = self.cripto.signing_with_private_key_RSA(message, KEY_PEM_PATH)
-            # Encriptamos mensaje
-            encrypted_message = self.rsa.encrypt_with_public_key_usr(message, self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii'))
+            # Comprobamos el certificado y la clave pública del usuario
+            usr_public_key_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii')
+            usr_certificate_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_certificate"].encode('ascii')
+            usr_certificate = load_pem_x509_certificate(usr_certificate_pem)
+            AC2_certificate = self.rsa.AC2.certificate_AC2
+            AC2_public_key = self.rsa.AC2.public_key_AC2
+            CRL = self.rsa.AC.certificate_CRL
+
+            if(not self.cripto.certificate_validation(usr_certificate, AC2_certificate, AC2_public_key, CRL)):
+                messagebox.showerror("Register Error", "Incorrect public key of the user or not valid")
+                self.__make_offer_clicked()
+                return
+            
+            # El sistema no se fía de AC2, sino de AC1 y AC, por lo que comprobamos
+            # el certificado de AC2 para comprobar que lo valida AC
+            AC_certificate = self.rsa.AC.certificate_AC
+            AC_public_key = self.rsa.AC.public_key_AC
+            if(not self.cripto.certificate_validation(AC2_certificate, AC_certificate, AC_public_key, CRL)):
+                messagebox.showerror("Register Error", "Incorrect public key of the issuer of the user or not valid")
+                self.__make_offer_clicked()
+                return
+
+            # Encriptamos mensaje, la clave publica es la que se corresponde con  el certificado
+            encrypted_message = self.rsa.encrypt_with_public_key_usr(message, usr_public_key_pem)
             self.__open_home_window(encrypted_message, signature)
         
 
@@ -134,7 +160,6 @@ class App(tk.Frame):
         if (not self.maximum_attempts(self.counter_pass, "pass")):
             return
         
-        
         # Comprobamos la contraseña
         if(not self.cripto.KDF_verify_password(self.password.get())):
             messagebox.showerror("Sign In Error", "Incorrect password")
@@ -145,9 +170,12 @@ class App(tk.Frame):
         # ------------- CON CADA INICIO DE SESIÓN CAMBIAMOS EL SALT Y LA CLAVE DE SESIÓN PÚBLICA
         derived_key_and_salt = self.cripto.KDF_derived_key_generate(self.password.get())
         usr_public_key = self.rsa.generate_private_key_usr(self.cripto.n_dict)
+        usr_certificate = self.rsa.user_pem_certificate
         self.cripto.user_data_list[self.cripto.n_dict]["user_pass"] = base64.b64encode(derived_key_and_salt[0]).decode('ascii')
         self.cripto.user_data_list[self.cripto.n_dict]["user_salt"] = base64.b64encode(derived_key_and_salt[1]).decode('ascii')      
-        self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"] = base64.b64encode(usr_public_key).decode("ascii")
+        self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"] = usr_public_key.decode("ascii")
+        self.cripto.user_data_list[self.cripto.n_dict]["user_certificate"] = usr_certificate.decode("ascii")
+
 
         # Actualizamos la base de datos
         # Actualizamos los atributos attempts
@@ -307,7 +335,28 @@ class App(tk.Frame):
             oferta = str(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH)) + \
                      str(self.offer_tokens) + str(self.offer_price)
             signature = self.cripto.signing_with_private_key_RSA(oferta, KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem")
-            # Encriptamos la oferta
+            
+            # Verificamos el cetificado del servidor y obtenemos su clave publica
+            server_certificate = self.rsa.server_certificate
+            AC1_certificate = self.rsa.AC1.certificate_AC1
+            AC1_public_key = self.rsa.AC1.public_key_AC1
+            CRL = self.rsa.AC.certificate_CRL
+            if(not self.cripto.certificate_validation(server_certificate, AC1_certificate, AC1_public_key, CRL)):
+                messagebox.showerror("Offer Error", "Incorrect public key of the server or not valid")
+                self.__make_offer_clicked()
+                return
+            
+            # Los usuarios no se fian de AC1, sino de AC2 y AC, por lo que comprobamos
+            # el certificado de AC1 para comprobar que lo valida AC
+            AC_certificate = self.rsa.AC.certificate_AC
+            AC_public_key = self.rsa.AC.public_key_AC
+            if(not self.cripto.certificate_validation(AC1_certificate, AC_certificate, AC_public_key, CRL)):
+                messagebox.showerror("Offer Error", "Incorrect public key of the issuer of the server or not valid")
+                self.__make_offer_clicked()
+                return
+            
+            # Encriptamos la oferta, la public_key que se usa en la función es la 
+            # que se corresponde con el certificado
             oferta_encrypted = self.rsa.encrypt_with_public_key_server(oferta)
 
             self.__publish_offer(signature, oferta_encrypted)
@@ -346,8 +395,30 @@ class App(tk.Frame):
         message = "Offer Published Successfully"
         # Firma del hash
         signature = self.cripto.signing_with_private_key_RSA(message, KEY_PEM_PATH)
-        # Encriptamos el mensaje
-        encrypted_message = self.rsa.encrypt_with_public_key_usr(message, self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii'))
+        # Comprobamos el certificado y la clave pública del usuario
+        usr_public_key_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii')
+        usr_certificate_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_certificate"].encode('ascii')
+        usr_certificate = load_pem_x509_certificate(usr_certificate_pem)
+        AC2_certificate = self.rsa.AC2.certificate_AC2
+        AC2_public_key = self.rsa.AC2.public_key_AC2
+        CRL = self.rsa.AC.certificate_CRL
+
+        if(not self.cripto.certificate_validation(usr_certificate, AC2_certificate, AC2_public_key, CRL)):
+            messagebox.showerror("Register Error", "Incorrect public key of the user or not valid")
+            self.__make_offer_clicked()
+            return
+        
+        # El sistema no se fía de AC2, sino de AC1 y AC, por lo que comprobamos
+        # el certificado de AC2 para comprobar que lo valida AC
+        AC_certificate = self.rsa.AC.certificate_AC
+        AC_public_key = self.rsa.AC.public_key_AC
+        if(not self.cripto.certificate_validation(AC2_certificate, AC_certificate, AC_public_key, CRL)):
+            messagebox.showerror("Register Error", "Incorrect public key of the issuer of the user or not valid")
+            self.__make_offer_clicked()
+            return
+
+        # Encriptamos mensaje, la clave publica es la que se corresponde con  el certificado
+        encrypted_message = self.rsa.encrypt_with_public_key_usr(message, usr_public_key_pem)
         self.__open_home_window(encrypted_message, signature)
 
 
@@ -369,9 +440,30 @@ class App(tk.Frame):
         message_buy = "Purchase Completed Successfully"
         # Firmamos el hash
         signature_buy = self.cripto.signing_with_private_key_RSA(message_buy, KEY_PEM_PATH)
-        # Encriptamos el mensaje
-        encrypted_message_buy = self.rsa.encrypt_with_public_key_usr(message_buy, 
-                               self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii'))
+        # Comprobamos el certificado y la clave pública del usuario
+        usr_public_key_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii')
+        usr_certificate_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_certificate"].encode('ascii')
+        usr_certificate = load_pem_x509_certificate(usr_certificate_pem)
+        AC2_certificate = self.rsa.AC2.certificate_AC2
+        AC2_public_key = self.rsa.AC2.public_key_AC2
+        CRL = self.rsa.AC.certificate_CRL
+
+        if(not self.cripto.certificate_validation(usr_certificate, AC2_certificate, AC2_public_key, CRL)):
+            messagebox.showerror("Register Error", "Incorrect public key of the user or not valid")
+            self.__make_offer_clicked()
+            return
+        
+        # El sistema no se fía de AC2, sino de AC1 y AC, por lo que comprobamos
+        # el certificado de AC2 para comprobar que lo valida AC
+        AC_certificate = self.rsa.AC.certificate_AC
+        AC_public_key = self.rsa.AC.public_key_AC
+        if(not self.cripto.certificate_validation(AC2_certificate, AC_certificate, AC_public_key, CRL)):
+            messagebox.showerror("Register Error", "Incorrect public key of the issuer of the user or not valid")
+            self.__make_offer_clicked()
+            return
+
+        # Encriptamos mensaje, la clave publica es la que se corresponde con  el certificado
+        encrypted_message_buy = self.rsa.encrypt_with_public_key_usr(message_buy, usr_public_key_pem)
         
         # Le sumamos los tokens al comprador
         self.cripto.user_data_list[self.cripto.n_dict]["user_tokens"] = \
@@ -586,7 +678,27 @@ class App(tk.Frame):
                 compra = str(self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH)) +\
                          str(tokens_offered) + str(price_offered)
                 signature = self.cripto.signing_with_private_key_RSA(compra, KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem")
-                # Encriptamos el mensaje
+               
+                # Verificamos el cetificado del servidor y obtenemos su clave publica
+                server_certificate = self.rsa.server_certificate   
+                AC1_certificate = self.rsa.AC1.certificate_AC1
+                AC1_public_key = self.rsa.AC1.public_key_AC1
+                CRL = self.rsa.AC.certificate_CRL
+                if(not self.cripto.certificate_validation(server_certificate, AC1_certificate, AC1_public_key, CRL)):
+                    messagebox.showerror("Offer Error", "Incorrect public key of the server or not valid")
+                    self.__make_offer_clicked()
+                    return
+               
+                # Como los usuarios solo se fian de AC2 y AC, comrpobamos que
+                # el certificado de AC1 ha sido provisto por AC
+                AC_certificate = self.rsa.AC.certificate_AC
+                AC_public_key = self.rsa.AC.public_key_AC
+                if(not self.cripto.certificate_validation(AC1_certificate, AC_certificate, AC_public_key, CRL)):
+                    messagebox.showerror("Offer Error", "Incorrect public key of the issuer of the server or not valid")
+                    self.__make_offer_clicked()
+                    return
+                # Encriptamos el mensaje (compra), la public_key que se usa en la función es la 
+                # que se corresponde con el certificado
                 compra_encrypted = self.rsa.encrypt_with_public_key_server(compra)
                 self.__accept_offer(index, tokens_offered, price_offered, signature, compra_encrypted)
                 return

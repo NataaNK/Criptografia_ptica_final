@@ -7,19 +7,21 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 import datetime
+from AC import AC
 
-class AC:
+class AC1:
     
-    def __init__(self):
+    def __init__(self, AC: AC):
 
         self.time_limit = datetime.timedelta(1, 0, 0)
 
-        self.private_key_AC = rsa.generate_private_key(
+        self.private_key_AC1 = rsa.generate_private_key(
             public_exponent=65537,
             key_size=2048,
         )
 
-        self.public_key_AC = self.private_key_AC.public_key()
+        self.public_key_AC1 = self.private_key_AC1.public_key()
+        self.certificate_AC1 = AC.obtain_cert_from_the_issuer_AC("AC1", self.public_key_AC1)
 
     def obtain_cert_from_the_issuer_AC1(self, subject_name: str, subject_public_key: rsa.RSAPublicKey):    
         
@@ -40,7 +42,7 @@ class AC:
 
         # Firmamos certificado con privada de la autoridad
         certificate = builder.sign(
-            private_key=self.private_key, algorithm=hashes.SHA256(),
+            private_key=self.private_key_AC1, algorithm=hashes.SHA256(),
         )
 
         return certificate

@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives import serialization, hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import padding
 import pyotp
 import qrcode
+from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
@@ -30,7 +31,8 @@ class Criptografia:
             return bool(re.match(patron, contra))
     
 
-    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key_server, public_pem_usr):
+    def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key_server, 
+                     public_pem_usr, user_certificate):
        
         # Generamos la contraseña derivada KDF a partir del salt
         derived_key_and_salt = self.KDF_derived_key_generate(contra)
@@ -59,9 +61,11 @@ class Criptografia:
                             )
                 )
 
+
         user_dict = {"user_name": name,
                      "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encript
-                     "user_public_key" : public_pem_usr.decode('ascii'), # no encript
+                     "user_public_key": public_pem_usr.decode('ascii'), # no encript
+                     "user_certificate": user_certificate.decode('ascii'),
                      "user_tokens": tokens,
                      "user_total_tokens_offered": offers,
                      "user_salt": base64.b64encode(salt).decode('ascii'), # no encript

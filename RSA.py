@@ -5,6 +5,9 @@ from cryptography.hazmat.primitives import hashes
 import cryptography.exceptions
 from pathlib import Path
 import base64
+from AC import AC
+from AC1 import AC1
+from AC2 import AC2
 
 # GLOBAL VARIABLES
 KEY_PEM_PATH = str(Path.cwd()) + "/data/clave servidor/key.pem"
@@ -14,6 +17,8 @@ KEY_USR_PATH = str(Path.cwd()) + "/data/clave usuarios/"
 # Generamos la clave privada y pública
 class RSA:
     def __init__(self):
+        # Generamos autoridad y su certificado
+        self.AC = AC()
         self.generate_private_key_server()
         
     def generate_private_key_server(self):
@@ -26,7 +31,6 @@ class RSA:
         
     def private_key_serialization_server(self, private_key_server):
         # Guardamos la clave privada encriptada en el disco con una contraseña
-
         private_pem_server = private_key_server.private_bytes(
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PrivateFormat.PKCS8,
@@ -40,8 +44,10 @@ class RSA:
 
 
     def public_key_serialization_server(self, private_key_server):
-        # Atributo visible para todo el mundo: CLAVE PÚBLICA
         self.public_key_server = private_key_server.public_key()
+        # Autoridad AC1
+        self.AC1 = AC1(self.AC)
+        self.server_certificate = self.AC1.obtain_cert_from_the_issuer_AC1("servidor", self.public_key_server)
         self.public_pem_server = self.public_key_server.public_bytes(
                         encoding=serialization.Encoding.PEM,
                         format=serialization.PublicFormat.SubjectPublicKeyInfo
@@ -73,13 +79,19 @@ class RSA:
         b'-----BEGIN ENCRYPTED PRIVATE KEY-----'
         
         self.private_key_storage_usr(private_pem_usr, num_usr)
-        return self.public_key_serialization_usr(private_key_usr)
+        return self.public_key_serialization_usr(private_key_usr, num_usr)
         
     
 
-    def public_key_serialization_usr(self, private_key):
-        # Atributo visible para todo el mundo: CLAVE PÚBLICA
+    def public_key_serialization_usr(self, private_key, num_usr):
         self.public_key_usr = private_key.public_key()
+        # Autoridad AC2
+        self.AC2 = AC2(self.AC)
+        self.user_certificate = self.AC2.obtain_cert_from_the_issuer_AC2("user"+str(num_usr), self.public_key_usr)
+        self.user_pem_certificate = self.user_certificate.public_bytes(
+            encoding=serialization.Encoding.PEM
+        )
+
         self.public_pem_usr = self.public_key_usr.public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo

@@ -20,6 +20,9 @@ class AC:
         )
 
         self.public_key_AC = self.private_key_AC.public_key()
+        self.certificate_AC = self.obtain_cert_from_the_issuer_AC("AC", self.public_key_AC)
+        # Creamos lista de revocados
+        self.create_revokated_certificate_list()
 
     def obtain_cert_from_the_issuer_AC(self, subject_name: str, subject_public_key: rsa.RSAPublicKey):    
         
@@ -40,7 +43,7 @@ class AC:
 
         # Firmamos certificado con privada de la autoridad
         certificate = builder.sign(
-            private_key=self.private_key, algorithm=hashes.SHA256(),
+            private_key=self.private_key_AC, algorithm=hashes.SHA256(),
         )
 
         return certificate
@@ -54,14 +57,14 @@ class AC:
             key_size=2048,
         )
         
-        self.CRL = x509.CertificateRevocationListBuilder()
-        self.CRL = self.CRL.issuer_name(x509.Name([
+        builder = x509.CertificateRevocationListBuilder()
+        builder = builder.issuer_name(x509.Name([
             x509.NameAttribute(NameOID.COMMON_NAME, 'AC'),
         ]))
 
-        self.CRL = self.CRL.last_update(datetime.datetime.today())
-        self.CRL = self.CRL.next_update(datetime.datetime.today() + update_time)
+        builder = builder.last_update(datetime.datetime.today())
+        builder = builder.next_update(datetime.datetime.today() + update_time)
 
-        self.certificate_CRL = self.CRL.sign(
+        self.certificate_CRL = builder.sign(
             private_key=private_key, algorithm=hashes.SHA256(),
         )
