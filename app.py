@@ -29,6 +29,8 @@ class App(tk.Frame):
         # SISTEMA PARA CRIPTOGRAFÍA
         self.cripto = cripto
         self.rsa = criptosistema
+        self.CRL_builder = self.rsa.AC.CRL_builder
+        self.CRL = self.rsa.AC.CRL
 
         self.root = tk.Tk()
         super().__init__(self.root)
@@ -70,7 +72,13 @@ class App(tk.Frame):
         
         
         usr_public_pem = self.rsa.generate_private_key_usr(self.cripto.n_dict)
-        usr_certificate = self.rsa.user_pem_certificate
+        usr_certificate_pem = self.rsa.user_pem_certificate
+        AC2_certificate_pem = self.rsa.AC2.certificate_AC2.public_bytes(
+            encoding=serialization.Encoding.PEM
+        ).decode('ascii')
+        AC_certificate_pem = self.rsa.AC.certificate_AC.public_bytes(
+            encoding=serialization.Encoding.PEM
+        ).decode('ascii')
         # Guardamos la clave derivada haciendo uso de KDF y los datos encriptados con RSA
         self.cripto.data_storage(
                             self.rsa.encrypt_with_public_key_server(self.username.get()),
@@ -79,7 +87,8 @@ class App(tk.Frame):
                             self.rsa.encrypt_with_public_key_server("0"),
                             self.rsa.public_key_server, 
                             usr_public_pem,
-                            usr_certificate
+                            usr_certificate_pem,
+                            [AC2_certificate_pem, AC_certificate_pem]
                             )
 
         self.__clear_frame()
@@ -109,28 +118,43 @@ class App(tk.Frame):
             message = "Register Completed Successfully"
             # Firma del hash
             signature = self.cripto.signing_with_private_key_RSA(message, KEY_PEM_PATH)
-            # Comprobamos el certificado y la clave pública del usuario
+            # Comprobamos el certificado y la clave pública del usuario,
+            # seguimos la cadena ghasta encontrar la autoridad de la que se fía el sistema (AC)
             usr_public_key_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii')
             usr_certificate_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_certificate"].encode('ascii')
             usr_certificate = load_pem_x509_certificate(usr_certificate_pem)
-            AC2_certificate = self.rsa.AC2.certificate_AC2
-            AC2_public_key = self.rsa.AC2.public_key_AC2
-            CRL = self.rsa.AC.certificate_CRL
+            # Cadena de validación 
+            certificate_validiting = usr_certificate
+            reliable = False
+            for authority in self.cripto.user_data_list[self.cripto.n_dict]["certificate_chain"]:
+                A_certificate_pem = authority.encode('ascii')
+                A_certificate = load_pem_x509_certificate(A_certificate_pem)
+                A_public_key = A_certificate.public_key()
 
-            if(not self.cripto.certificate_validation(usr_certificate, AC2_certificate, AC2_public_key, CRL)):
-                messagebox.showerror("Register Error", "Incorrect public key of the user or not valid")
-                self.__make_offer_clicked()
+                if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                          self.CRL, self.CRL_builder)):
+                    messagebox.showerror("Register Error", "Incorrect public key or not valid, please sign in again")
+                    self.__sign_up_clicked()
+                    return
+                
+                # Como me fío de AC, compruebo que efectivamente le esta certificando AC
+                if(str(A_certificate.subject) == "<Name(CN=AC)>"):
+                    # AC se certifica a sí mismo puesto que es la autoridad máxima
+                    if(not self.cripto.certificate_validation(A_certificate, A_certificate, A_public_key, 
+                                                              self.CRL, self.CRL_builder)):
+                        messagebox.showerror("Register Error", "Incorrect public key or not valid, please sign in again")
+                        self.__sign_up_clicked()
+                        return
+                    reliable = True
+                else:
+                    certificate_validiting = A_certificate
+
+            # Si no te fías de las autoridades salta error
+            if not reliable:
+                messagebox.showerror("Register Error", "Public key not reliable")
+                self.__sign_up_clicked()
                 return
             
-            # El sistema no se fía de AC2, sino de AC1 y AC, por lo que comprobamos
-            # el certificado de AC2 para comprobar que lo valida AC
-            AC_certificate = self.rsa.AC.certificate_AC
-            AC_public_key = self.rsa.AC.public_key_AC
-            if(not self.cripto.certificate_validation(AC2_certificate, AC_certificate, AC_public_key, CRL)):
-                messagebox.showerror("Register Error", "Incorrect public key of the issuer of the user or not valid")
-                self.__make_offer_clicked()
-                return
-
             # Encriptamos mensaje, la clave publica es la que se corresponde con  el certificado
             encrypted_message = self.rsa.encrypt_with_public_key_usr(message, usr_public_key_pem)
             self.__open_home_window(encrypted_message, signature)
@@ -140,18 +164,29 @@ class App(tk.Frame):
     # ------------------------------------- AUTENTICACIÓN -------------------------------------
 
     def __sign_in_authentication_1(self):
-
+    
         # Confirmamos que el usuario existe
         if(not self.cripto.KDF_verify_user_name(self.username.get())):
             messagebox.showerror("Sign In Error", "User not found")
-            self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] += 1
             self.__sign_in_clicked()
             return
+        
         self.counter_pass_expiration = self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][1]
 
         if ((time.time()-self.counter_pass_expiration) > 1800): #30 minutos
             self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] = 0
             self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][1] = time.time()
+            # Actualizamos los atributos attempts
+            try:
+                with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                    user_data_list = json.load(file)
+            except FileNotFoundError:
+                user_data_list = []
+
+            del user_data_list[self.cripto.n_dict]
+            user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+            with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                json.dump(user_data_list, file, indent=2)
 
         self.counter_pass = self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0]
 
@@ -162,14 +197,50 @@ class App(tk.Frame):
         
         # Comprobamos la contraseña
         if(not self.cripto.KDF_verify_password(self.password.get())):
-            messagebox.showerror("Sign In Error", "Incorrect password")
             self.cripto.user_data_list[self.cripto.n_dict]["attempts_pass"][0] += 1
+            # Actualizamos los atributos attempts
+            try:
+                with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                    user_data_list = json.load(file)
+            except FileNotFoundError:
+                user_data_list = []
+
+            del user_data_list[self.cripto.n_dict]
+            user_data_list.insert(self.cripto.n_dict, self.cripto.user_data_list[self.cripto.n_dict])
+            with open(USERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                json.dump(user_data_list, file, indent=2)
+            messagebox.showerror("Sign In Error", "Incorrect password")
             self.__sign_in_clicked()
             return
         
         # ------------- CON CADA INICIO DE SESIÓN CAMBIAMOS EL SALT Y LA CLAVE DE SESIÓN PÚBLICA
+        try:
+            with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                offers_data_list = json.load(file)
+        except FileNotFoundError:
+            offers_data_list = []
+
+        for offer in offers_data_list:
+            if(((self.cripto.decrypt_with_private_key(offer["user_seller"], KEY_PEM_PATH) == \
+             self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH)))
+               and (offer["accepted_offer"][0])):
+                decrypted_offer_msg = self.cripto.decrypt_with_private_key(offer["accepted_offer"][0], KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem")
+            
         derived_key_and_salt = self.cripto.KDF_derived_key_generate(self.password.get())
         usr_public_key = self.rsa.generate_private_key_usr(self.cripto.n_dict)
+        num_offer = 0
+        for offer in offers_data_list:
+            if(((self.cripto.decrypt_with_private_key(offer["user_seller"], KEY_PEM_PATH) == \
+                self.cripto.decrypt_with_private_key(self.cripto.user_data_list[self.cripto.n_dict]["user_name"], KEY_PEM_PATH)))
+                and (offer["accepted_offer"][0])):
+                offer["accepted_offer"][0] = self.rsa.encrypt_with_public_key_usr(decrypted_offer_msg, usr_public_key)
+                del offers_data_list[num_offer]
+                offers_data_list.insert(num_offer, offer)
+            num_offer += 1
+
+        with open(OFFERS_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+            json.dump(offers_data_list, file, indent=2)
+
         usr_certificate = self.rsa.user_pem_certificate
         self.cripto.user_data_list[self.cripto.n_dict]["user_pass"] = base64.b64encode(derived_key_and_salt[0]).decode('ascii')
         self.cripto.user_data_list[self.cripto.n_dict]["user_salt"] = base64.b64encode(derived_key_and_salt[1]).decode('ascii')      
@@ -178,7 +249,6 @@ class App(tk.Frame):
 
 
         # Actualizamos la base de datos
-        # Actualizamos los atributos attempts
         try:
             with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
                 user_data_list = json.load(file)
@@ -238,8 +308,9 @@ class App(tk.Frame):
                         json.dump(user_blocked_list, file, indent=2)
                 else:
                     messagebox.showerror("Sign In Error", "Too many attempts, try again later")
-                    self.main()
                     ret = False
+                    self.main()
+                    
             n_block_dict += 1
 
         # Tras 6 intentos bloqueamos la cuenta para evitar un posible ataque por fuerza bruta
@@ -263,9 +334,9 @@ class App(tk.Frame):
                 self.cripto.user_data_list[self.cripto.n_dict]["attempts_code"][0] = 0
 
             messagebox.showerror("Sign In Error", "Too many attempts, try again later")
-            self.main()
             ret = False
-        
+            self.main()
+            
         # Actualizamos los atributos attempts
         try:
             with open(USERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
@@ -338,20 +409,35 @@ class App(tk.Frame):
             
             # Verificamos el cetificado del servidor y obtenemos su clave publica
             server_certificate = self.rsa.server_certificate
-            AC1_certificate = self.rsa.AC1.certificate_AC1
-            AC1_public_key = self.rsa.AC1.public_key_AC1
-            CRL = self.rsa.AC.certificate_CRL
-            if(not self.cripto.certificate_validation(server_certificate, AC1_certificate, AC1_public_key, CRL)):
-                messagebox.showerror("Offer Error", "Incorrect public key of the server or not valid")
-                self.__make_offer_clicked()
-                return
-            
-            # Los usuarios no se fian de AC1, sino de AC2 y AC, por lo que comprobamos
-            # el certificado de AC1 para comprobar que lo valida AC
-            AC_certificate = self.rsa.AC.certificate_AC
-            AC_public_key = self.rsa.AC.public_key_AC
-            if(not self.cripto.certificate_validation(AC1_certificate, AC_certificate, AC_public_key, CRL)):
-                messagebox.showerror("Offer Error", "Incorrect public key of the issuer of the server or not valid")
+            # Cadena de validación
+            certificate_validiting = server_certificate
+            reliable = False
+            for authority in self.rsa.server_certificate_chaining:
+                A_certificate_pem = authority.encode('ascii')
+                A_certificate = load_pem_x509_certificate(A_certificate_pem)
+                A_public_key = A_certificate.public_key()
+
+                if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                          self.CRL, self.CRL_builder)):
+                    messagebox.showerror("Publish Offer Error", "Incorrect public key or not valid, please sign in again")
+                    self.__make_offer_clicked()
+                    return
+                
+                # Cuando llegue a una autoridad de la que me fío, paro
+                if(str(A_certificate.subject) in self.cripto.user_data_list[self.cripto.n_dict]["reliable_authorities"]):
+                    certificate_validiting = A_certificate
+                    if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                              self.CRL, self.CRL_builder)):
+                        messagebox.showerror("Publish Offer Error", "Incorrect public key or not valid, please sign in again")
+                        self.__make_offer_clicked()
+                        return
+                    reliable = True 
+                else:
+                    certificate_validiting = A_certificate
+
+            # Si no te fías de las autoridades salta error
+            if not reliable:
+                messagebox.showerror("Publish Offer Error", "Public key not reliable")
                 self.__make_offer_clicked()
                 return
             
@@ -399,24 +485,38 @@ class App(tk.Frame):
         usr_public_key_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii')
         usr_certificate_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_certificate"].encode('ascii')
         usr_certificate = load_pem_x509_certificate(usr_certificate_pem)
-        AC2_certificate = self.rsa.AC2.certificate_AC2
-        AC2_public_key = self.rsa.AC2.public_key_AC2
-        CRL = self.rsa.AC.certificate_CRL
+        # Cadena de validación
+        certificate_validiting = usr_certificate
+        reliable = False
+        for authority in self.cripto.user_data_list[self.cripto.n_dict]["certificate_chain"]:
+            A_certificate_pem = authority.encode('ascii')
+            A_certificate = load_pem_x509_certificate(A_certificate_pem)
+            A_public_key = A_certificate.public_key()
 
-        if(not self.cripto.certificate_validation(usr_certificate, AC2_certificate, AC2_public_key, CRL)):
-            messagebox.showerror("Register Error", "Incorrect public key of the user or not valid")
+            if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                      self.CRL, self.CRL_builder)):
+                messagebox.showerror("Publish Offer Error", "Incorrect public key or not valid, please sign in again")
+                self.__make_offer_clicked()
+                return
+            
+            # Como me fío de AC, compruebo que efectivamente le esta certificando AC
+            if(str(A_certificate.subject) == "<Name(CN=AC)>"):
+                # AC se certifica a sí mismo puesto que es la autoridad máxima
+                if(not self.cripto.certificate_validation(A_certificate, A_certificate, A_public_key, 
+                                                          self.CRL, self.CRL_builder)):
+                    messagebox.showerror("Publish Offer Error", "Incorrect public key or not valid, please sign in again")
+                    self.__make_offer_clicked()
+                    return
+                reliable = True 
+            else:
+                certificate_validiting = A_certificate
+                
+        # Si no te fías de las autoridades salta error
+        if not reliable:
+            messagebox.showerror("Publish Offer Error", "Public key not reliable")
             self.__make_offer_clicked()
             return
         
-        # El sistema no se fía de AC2, sino de AC1 y AC, por lo que comprobamos
-        # el certificado de AC2 para comprobar que lo valida AC
-        AC_certificate = self.rsa.AC.certificate_AC
-        AC_public_key = self.rsa.AC.public_key_AC
-        if(not self.cripto.certificate_validation(AC2_certificate, AC_certificate, AC_public_key, CRL)):
-            messagebox.showerror("Register Error", "Incorrect public key of the issuer of the user or not valid")
-            self.__make_offer_clicked()
-            return
-
         # Encriptamos mensaje, la clave publica es la que se corresponde con  el certificado
         encrypted_message = self.rsa.encrypt_with_public_key_usr(message, usr_public_key_pem)
         self.__open_home_window(encrypted_message, signature)
@@ -444,24 +544,37 @@ class App(tk.Frame):
         usr_public_key_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_public_key"].encode('ascii')
         usr_certificate_pem = self.cripto.user_data_list[self.cripto.n_dict]["user_certificate"].encode('ascii')
         usr_certificate = load_pem_x509_certificate(usr_certificate_pem)
-        AC2_certificate = self.rsa.AC2.certificate_AC2
-        AC2_public_key = self.rsa.AC2.public_key_AC2
-        CRL = self.rsa.AC.certificate_CRL
+        # Cadena de validación
+        certificate_validiting = usr_certificate
+        reliable = False
+        for authority in self.cripto.user_data_list[self.cripto.n_dict]["certificate_chain"]:
+            A_certificate_pem = authority.encode('ascii')
+            A_certificate = load_pem_x509_certificate(A_certificate_pem)
+            A_public_key = A_certificate.public_key()
 
-        if(not self.cripto.certificate_validation(usr_certificate, AC2_certificate, AC2_public_key, CRL)):
-            messagebox.showerror("Register Error", "Incorrect public key of the user or not valid")
-            self.__make_offer_clicked()
+            if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                      self.CRL, self.CRL_builder)):
+                messagebox.showerror("Purchase Error", "Incorrect public key or not valid, please sign in again")
+                self.__open_home_window()
+                return
+            
+            # Como me fío de AC, compruebo que efectivamente le esta certificando AC
+            if(str(A_certificate.subject) == "<Name(CN=AC)>"):
+                # AC se certifica a sí mismo puesto que es la autoridad máxima
+                if(not self.cripto.certificate_validation(A_certificate, A_certificate, A_public_key, 
+                                                          self.CRL, self.CRL_builder)):
+                    messagebox.showerror("Purchase Error", "Incorrect public key or not valid, please sign in again")
+                    self.__open_home_window()
+                    return
+                reliable = True
+            else:
+                certificate_validiting = A_certificate
+
+        if not reliable:
+            messagebox.showerror("Purchase Error", "Public key not reliable")
+            self.__open_home_window()
             return
         
-        # El sistema no se fía de AC2, sino de AC1 y AC, por lo que comprobamos
-        # el certificado de AC2 para comprobar que lo valida AC
-        AC_certificate = self.rsa.AC.certificate_AC
-        AC_public_key = self.rsa.AC.public_key_AC
-        if(not self.cripto.certificate_validation(AC2_certificate, AC_certificate, AC_public_key, CRL)):
-            messagebox.showerror("Register Error", "Incorrect public key of the issuer of the user or not valid")
-            self.__make_offer_clicked()
-            return
-
         # Encriptamos mensaje, la clave publica es la que se corresponde con  el certificado
         encrypted_message_buy = self.rsa.encrypt_with_public_key_usr(message_buy, usr_public_key_pem)
         
@@ -490,14 +603,58 @@ class App(tk.Frame):
         except FileNotFoundError:
             offers_list = []
 
-        # ----------------- FIRMA DIGITAL DEL SISTEMA -------------------------------
+        # ----------------- FIRMA DIGITAL DEL SISTEMA ------------------------------
+       
         # Mediante index, podemos obtener el diccionario de la oferta
         # y marcarla como aceptada
         message_sell = str("Your offer of " + tokens_offered + "tokens for the price of " + price_offered + \
                     "euros has been accepted")
         # Firma del hash
         signature_sell = self.cripto.signing_with_private_key_RSA(message_sell, KEY_PEM_PATH)
-        self.offer_list[index]["accepted_offer"] = [message_sell, base64.b64encode(signature_sell).decode('ascii'), 
+        
+        # Comprobamos el certificado y la clave pública del usuario vendedor
+        for dicti in user_data_list:
+            if (self.cripto.decrypt_with_private_key(self.offer_list[index]["user_seller"], KEY_PEM_PATH) == \
+                self.cripto.decrypt_with_private_key(dicti["user_name"], KEY_PEM_PATH)):
+                usr_public_key_pem = dicti["user_public_key"].encode('ascii')
+                usr_certificate_pem = dicti["user_certificate"].encode('ascii')
+                usr_certificate = load_pem_x509_certificate(usr_certificate_pem)
+
+        # Cadena de validación
+        certificate_validiting = usr_certificate
+        reliable = False
+        for authority in self.cripto.user_data_list[self.cripto.n_dict]["certificate_chain"]:
+            A_certificate_pem = authority.encode('ascii')
+            A_certificate = load_pem_x509_certificate(A_certificate_pem)
+            A_public_key = A_certificate.public_key()
+
+            if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                      self.CRL, self.CRL_builder)):
+                messagebox.showerror("Purchase Error", "Incorrect public key or not valid, please sign in again")
+                self.__make_offer_clicked()
+                return
+            
+            # Como me fío de AC, compruebo que efectivamente le esta certificando AC
+            if(str(A_certificate.subject) == "<Name(CN=AC)>"):
+                # AC se certifica a sí mismo puesto que es la autoridad máxima
+                if(not self.cripto.certificate_validation(A_certificate, A_certificate, A_public_key, 
+                                                          self.CRL, self.CRL_builder)):
+                    messagebox.showerror("Purchase Error", "Incorrect public key or not valid, please sign in again")
+                    self.__make_offer_clicked()
+                    return
+                reliable = True
+            else:
+                certificate_validiting = A_certificate
+
+        if not reliable:
+            messagebox.showerror("Purchase Error", "Public key not reliable")
+            self.__make_offer_clicked()
+            return
+        
+        # Encriptamos mensaje, la clave publica es la que se corresponde con  el certificado
+        encrypted_message_sell = self.rsa.encrypt_with_public_key_usr(message_sell, usr_public_key_pem)
+
+        self.offer_list[index]["accepted_offer"] = [encrypted_message_sell, base64.b64encode(signature_sell).decode('ascii'), 
                                                     self.rsa.public_pem_server.decode('ascii')]
 
 
@@ -613,15 +770,17 @@ class App(tk.Frame):
                 # ----------------- VERIFICACIÓN FIRMA DIGITAL DEL SISTEMA ---------------------------
                 # El usuario comprueba la integridad, autenticación y no repudio
                 # del mensaje del sistema comprobando su firma digital
+                decrypted_message_sell = self.cripto.decrypt_with_private_key(dicti["accepted_offer"][0], KEY_USR_PATH + "key" + str(self.cripto.n_dict) + ".pem")
+
                 if not self.rsa.verify_signature_RSA_with_public_key(base64.b64decode(dicti["accepted_offer"][1]), 
-                                                dicti["accepted_offer"][0], dicti["accepted_offer"][2].encode('ascii')):
+                                                decrypted_message_sell, dicti["accepted_offer"][2].encode('ascii')):
                     messagebox.showerror("Corrupt Information", "We are having some security problems")
                     # Cerramos la aplicación para evitar un ataques
                     self.root.destroy()
                     return
 
                 # Mostramos mensaje de oferta aceptada
-                messagebox.showinfo("Sale Information",  dicti["accepted_offer"][0])
+                messagebox.showinfo("Sale Information",  decrypted_message_sell)
 
                 # Eliminamos la oferta de la base de datos
                 del self.offer_list[d]
@@ -681,22 +840,38 @@ class App(tk.Frame):
                
                 # Verificamos el cetificado del servidor y obtenemos su clave publica
                 server_certificate = self.rsa.server_certificate   
-                AC1_certificate = self.rsa.AC1.certificate_AC1
-                AC1_public_key = self.rsa.AC1.public_key_AC1
-                CRL = self.rsa.AC.certificate_CRL
-                if(not self.cripto.certificate_validation(server_certificate, AC1_certificate, AC1_public_key, CRL)):
-                    messagebox.showerror("Offer Error", "Incorrect public key of the server or not valid")
+                # Cadena de validación
+                certificate_validiting = server_certificate
+                reliable = False
+                for authority in self.rsa.server_certificate_chaining:
+                    A_certificate_pem = authority.encode('ascii')
+                    A_certificate = load_pem_x509_certificate(A_certificate_pem)
+                    A_public_key = A_certificate.public_key()
+
+                    if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                              self.CRL, self.CRL_builder)):
+                        messagebox.showerror("Offer Error", "Incorrect public key of the server or not valid, please sign in again")
+                        self.__make_offer_clicked()
+                        return
+                    
+                    # Cuando llegue a una autoridad de la que me fío, paro
+                    if(str(A_certificate.subject) in self.cripto.user_data_list[self.cripto.n_dict]["reliable_authorities"]):
+                        certificate_validiting = A_certificate
+                        if(not self.cripto.certificate_validation(certificate_validiting, A_certificate, A_public_key, 
+                                                                  self.CRL, self.CRL_builder)):
+                            messagebox.showerror("Offer Error", "Incorrect public key of the server or not valid, please sign in again")
+                            self.__make_offer_clicked()
+                            return
+                        reliable = True 
+                    else:
+                        certificate_validiting = A_certificate
+
+                # Si no te fías de las autoridades salta error
+                if not reliable:
+                    messagebox.showerror("Offer Error", "Public key not reliable")
                     self.__make_offer_clicked()
                     return
-               
-                # Como los usuarios solo se fian de AC2 y AC, comrpobamos que
-                # el certificado de AC1 ha sido provisto por AC
-                AC_certificate = self.rsa.AC.certificate_AC
-                AC_public_key = self.rsa.AC.public_key_AC
-                if(not self.cripto.certificate_validation(AC1_certificate, AC_certificate, AC_public_key, CRL)):
-                    messagebox.showerror("Offer Error", "Incorrect public key of the issuer of the server or not valid")
-                    self.__make_offer_clicked()
-                    return
+                
                 # Encriptamos el mensaje (compra), la public_key que se usa en la función es la 
                 # que se corresponde con el certificado
                 compra_encrypted = self.rsa.encrypt_with_public_key_server(compra)

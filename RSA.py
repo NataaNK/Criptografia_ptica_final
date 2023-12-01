@@ -19,6 +19,10 @@ class RSA:
     def __init__(self):
         # Generamos autoridad y su certificado
         self.AC = AC()
+        # Autoridad AC1
+        self.AC1 = AC1(self.AC)
+        # Autoridad AC2
+        self.AC2 = AC2(self.AC)
         self.generate_private_key_server()
         
     def generate_private_key_server(self):
@@ -45,9 +49,15 @@ class RSA:
 
     def public_key_serialization_server(self, private_key_server):
         self.public_key_server = private_key_server.public_key()
-        # Autoridad AC1
-        self.AC1 = AC1(self.AC)
+        
         self.server_certificate = self.AC1.obtain_cert_from_the_issuer_AC1("servidor", self.public_key_server)
+        AC1_certificate_pem = self.AC1.certificate_AC1.public_bytes(
+            encoding=serialization.Encoding.PEM
+        ).decode('ascii')
+        AC_certificate_pem = self.AC.certificate_AC.public_bytes(
+            encoding=serialization.Encoding.PEM
+        ).decode('ascii')
+        self.server_certificate_chaining = [AC1_certificate_pem, AC_certificate_pem]
         self.public_pem_server = self.public_key_server.public_bytes(
                         encoding=serialization.Encoding.PEM,
                         format=serialization.PublicFormat.SubjectPublicKeyInfo
@@ -85,8 +95,7 @@ class RSA:
 
     def public_key_serialization_usr(self, private_key, num_usr):
         self.public_key_usr = private_key.public_key()
-        # Autoridad AC2
-        self.AC2 = AC2(self.AC)
+    
         self.user_certificate = self.AC2.obtain_cert_from_the_issuer_AC2("user"+str(num_usr), self.public_key_usr)
         self.user_pem_certificate = self.user_certificate.public_bytes(
             encoding=serialization.Encoding.PEM

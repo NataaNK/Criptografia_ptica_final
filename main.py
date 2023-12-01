@@ -4,12 +4,14 @@ from rsa import RSA
 from app import App
 from pathlib import Path
 import json
+from datetime import datetime
 
 # GLOBAL VARIABLES  
 USERS_JSON_FILE_PATH =  str(Path.cwd()) + "/data/users.json"
 OFFERS_JSON_FILE_PATH = str(Path.cwd()) + "/data/offers.json"
 BLOCKED_USERS_JSON_FILE_PATH = str(Path.cwd()) + "/data/blocked_users.json"
 KEY_PEM_PATH = str(Path.cwd()) + "/data/clave servidor/key.pem"
+KEY_USR_PATH = str(Path.cwd()) + "/data/clave usuarios/" 
 
 cripto = Criptografia()
 
@@ -31,7 +33,6 @@ for dicti in user_data_list:
     dicti["user_totp_key"] = cripto.decrypt_with_private_key(dicti["user_totp_key"], KEY_PEM_PATH)
     dicti["user_hmac_key"] = cripto.decrypt_with_private_key(dicti["user_hmac_key"], KEY_PEM_PATH)
      
-     
 # offers.json
 try:
     with open(OFFERS_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file_offers:
@@ -39,8 +40,10 @@ try:
 except FileNotFoundError:
     offers_data_list = []
 
+
 for dicti in offers_data_list:
     dicti["user_seller"] = cripto.decrypt_with_private_key(dicti["user_seller"], KEY_PEM_PATH)
+ 
 
 # blocked_users.json
 try:
@@ -55,7 +58,7 @@ for dicti in blocked_data_list:
 # Generamos clave pública y privada del servidor
 criptosistema = RSA()
 
-# Ecriptamos los datos con la neuva clave
+# Ecriptamos los datos con la nueva clave
 
 # users.json
 for dicti in user_data_list:

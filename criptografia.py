@@ -13,12 +13,12 @@ import pyotp
 import qrcode
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
 
 # GLOBAL VARIABLES  
 USERS_JSON_FILE_PATH =  str(Path.cwd()) + "/data/users.json"
 KEY_PEM_PATH = str(Path.cwd()) + "/data/clave servidor/key.pem"
+CRL_JSON_FILE_PATH = str(Path.cwd()) + "/data/CRL.json"
 
 
 class Criptografia:
@@ -32,7 +32,7 @@ class Criptografia:
     
 
     def data_storage(self, name: bytes, contra: str, tokens: bytes, offers: bytes, public_key_server, 
-                     public_pem_usr, user_certificate):
+                     public_pem_usr, user_certificate, user_certificate_chain: list):
        
         # Generamos la contraseña derivada KDF a partir del salt
         derived_key_and_salt = self.KDF_derived_key_generate(contra)
@@ -66,6 +66,8 @@ class Criptografia:
                      "user_pass": base64.b64encode(derived_key).decode('ascii'), # no encript
                      "user_public_key": public_pem_usr.decode('ascii'), # no encript
                      "user_certificate": user_certificate.decode('ascii'),
+                     "certificate_chain" : user_certificate_chain,
+                     "reliable_authorities": ("<Name(CN=AC2)>", "<Name(CN=AC)>"),
                      "user_tokens": tokens,
                      "user_total_tokens_offered": offers,
                      "user_salt": base64.b64encode(salt).decode('ascii'), # no encript
@@ -73,6 +75,7 @@ class Criptografia:
                      "user_hmac_key": base64.b64encode(hmac_key).decode('ascii'),
                      "attempts_pass": [0, time.time()],
                      "attempts_code": [0, time.time()]
+                     
                      }
         
         self.user_data_list.append(user_dict)
@@ -238,7 +241,8 @@ class Criptografia:
     def certificate_validation(self, certificate: cryptography.x509.Certificate, 
                                issuer_certificate: cryptography.x509.Certificate, 
                                issuer_of_CRL_public_key: rsa.RSAPublicKey,
-                               CRL: cryptography.x509.CertificateRevocationList):
+                               CRL: cryptography.x509.CertificateRevocationList,
+                               CRL_builder: cryptography.x509.CertificateRevocationListBuilder):
         
         # Si el certificado está caducado lo añadimos a la CRL
         now = datetime.datetime.today()
@@ -250,11 +254,23 @@ class Criptografia:
                     datetime.datetime.today()
                 ).build()
 
-            CRL = CRL.add_revoked_certificate(revoked_cert)
+            CRL_builder.add_revoked_certificate(revoked_cert)
+            revoked_cert_pem = certificate.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+            revoked_data = {"certificate_pem": revoked_cert_pem,
+                            "revocation_date": str(datetime.datetime.today())}
 
-        # Comprobamos validez del certificado
-        CRL.is_signature_valid(issuer_of_CRL_public_key)
-        
+            # Lo añadimos en el json
+            try:
+                with open(CRL_JSON_FILE_PATH, "r", encoding="UTF-8", newline="") as file:
+                    CRL_data = json.load(file)
+            except FileNotFoundError:
+                CRL_data = []
+
+            CRL_data.append(revoked_data)
+
+            with open(CRL_JSON_FILE_PATH, "w", encoding="UTF-8", newline="") as file:
+                json.dump(CRL_data, file, indent=2)
+
         # Comprobamos que el certificado ha sido emitido por el
         # que dice ser y es correcto
         try:
