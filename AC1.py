@@ -45,4 +45,5 @@ class AC1:
             private_key=self.private_key_AC1, algorithm=hashes.SHA256(),
         )
 
+        print("\nMENSAJE DE DEPURACIÓN: certificado obtenido de AC1\n", str(certificate),"\n")
         return certificate

@@ -51,6 +51,7 @@ class AC:
             private_key=self.private_key_AC, algorithm=hashes.SHA256(),
         )
 
+        print("\nMENSAJE DE DEPURACIÓN: certificado obtenido de AC\n", str(certificate),"\n")
         return certificate
     
     def create_revokated_certificate_list(self):
@@ -85,3 +86,5 @@ class AC:
         self.CRL = self.CRL_builder.sign(
             private_key=self.private_key_AC, algorithm=hashes.SHA256(),
         )
+
+        print("\nMENSAJE DE DEPURACIÓN: lista de certificados revocados creada por AC\n", str(self.CRL),"\n")
